@@ -13,6 +13,7 @@
 #include "espnow_logger_viewer_app.h"
 #include "sd_card_status.h"
 #include "settings_pin.h"
+#include "system_settings_fix.h"
 #include "system_boot.h"
 
 #define TAG "espnow_logger_composition"
@@ -94,6 +95,17 @@ esp_err_t espnow_logger_composition_start(void)
      */
     espnow_logger_composition_start_optional("disable idle return failed",
                                              app_shell_set_idle_return_timeout_seconds(0));
+    /*
+     * The value above is what makes idle return off; this only stops the
+     * settings screen from changing it. Hidden, not read-only: "off" is not a
+     * value worth showing on site. Every other item stays reachable: there is
+     * no Wi-Fi page without Wi-Fi, and the rest (brightness, theme, timezone,
+     * calibration, clear data) is useful on a logger.
+     */
+    espnow_logger_composition_start_optional(
+        "fix idle return failed",
+        system_settings_fix(SYSTEM_SETTINGS_ITEM_IDLE_RETURN, SYSTEM_SETTINGS_FIX_HIDDEN,
+                            "the logger never returns by idle"));
 
     /*
      * Degraded mode: if the radio cannot start (a Wi-Fi STA build returns

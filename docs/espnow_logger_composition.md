@@ -17,6 +17,7 @@ main
        -> seed clock from build time   (only if the clock is before 2024-01-01)
        -> app_shell idle return = 0    (disabled)
        -> espnow_logger_start          (optional; degraded mode on failure)
+       -> system_settings_fix(IDLE_RETURN, HIDDEN)
        -> settings_pin_init            (optional)
        -> NVS health check             (invalid NVS: open Initialize NVS confirm)
        -> boot touch shortcut          (opens settings)
@@ -54,9 +55,24 @@ English contract: only `system_boot_start()` and `app_shell_start()` are fatal.
 
 ## Fixed Settings
 
-`system_settings_fix()` はまだ使っていません。このリポジトリの基盤 (esp32_project の d4d068e 時点) には `system_settings_fix` が無く、esp32_project 側の f865420 に入っています。取り込んだ後で、Wi-Fi 無効ビルドで意味の無い項目を固定するか決めます。ネットワークのページは `APP_WIFI_STA=0` で基盤が自動的に出さないので、残る候補は時刻ページ (時刻同期間隔、タイムゾーン) です。
+`system_settings_fix()` は composition からだけ、`app_shell_start()` の前に呼びます。値を決めるのは `app_shell_set_idle_return_timeout_seconds(0)` の行で、`system_settings_fix()` は設定画面で変えられないようにするだけです。
 
-English supplement: pending the upstream `system_settings_fix` commit; no item is fixed yet.
+| 項目 | 固定 | 理由 |
+|---|---|---|
+| `IDLE_RETURN` 無操作で戻る | HIDDEN | 起動のたびに 0 (しない) へ上書きするので、画面で変えても次の起動で戻る。「しない」は現場で見る価値のある値でもないので READONLY にせず隠す。一般ページの他の項目は残るので、隙間は行の空きだけ |
+
+固定しなかった項目と理由:
+
+- ネットワーク1/2 (`STORED_SSIDS`、`WIFI_SETUP`、`SYNC_INTERVAL`、`WIFI_IDLE`、`SYNC_NOW`): `APP_WIFI_STA=0` では基盤がページごと出さないので固定は不要。Wi-Fi 有効ビルドは service が起動しない構成なので対象外。
+- `TIMEZONE`: 時刻ページの表示用で、ログは UTC。現場で現地時刻を見る価値があるので残す。
+- `BRIGHTNESS` / `THEME`: 製品の都合で縛る理由が無い。
+- `TOUCH_CALIBRATE` / `CLEAR_TOUCH_CALIB`: 起動時の長押しショートカットの行き先であり、必要。
+- `CLEAR_APP_DATA`: ログの設定 (チャンネル、ピア、自動開始) を消せる、意味のある操作。
+- `CLEAR_NVS`: 回復の手段として残す。
+
+注意: 時刻ページの「時計は設定済みです」は 2024 年以降かで判定します。build 時刻の種付けでも「設定済み」と出るため、UTC パケットを受けて合ったことの表示ではありません。
+
+English supplement: only the idle-return item is fixed; the rest are deliberately left open and the reasons are above.
 
 ## Feature Switches
 
