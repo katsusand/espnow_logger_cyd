@@ -8,6 +8,23 @@
 #include "espnow_logger_viewer_view.h"
 #include "sim_catalog.h"
 
+/* The device's own icon art (pure: no display, no card), so the scenes show the real pixels.
+   sd_card_status_icon.c itself needs the firmware's Kconfig and log, so it is not built here. */
+#include "../../../components/services/sd_card_status/sd_card_status_icon_art.c"
+
+static const cyd_display_bitmap_t *problem_icon(sd_card_status_icon_kind_t kind)
+{
+    static uint16_t pixels[SD_CARD_STATUS_ICON_KIND_COUNT][SD_CARD_STATUS_ICON_SIZE_PX * SD_CARD_STATUS_ICON_SIZE_PX];
+    static cyd_display_bitmap_t bitmaps[SD_CARD_STATUS_ICON_KIND_COUNT];
+
+    if (bitmaps[kind].data == NULL) {
+        (void)sd_card_status_icon_art_render(kind, pixels[kind]);
+        bitmaps[kind] = (cyd_display_bitmap_t){ .data = pixels[kind], .width_px = SD_CARD_STATUS_ICON_SIZE_PX,
+                                                .height_px = SD_CARD_STATUS_ICON_SIZE_PX };
+    }
+    return &bitmaps[kind];
+}
+
 static const uint8_t k_local[6] = { 0x24, 0x6F, 0x28, 0xA1, 0xB2, 0xC3 };
 static const uint8_t k_peer[6] = { 0x7C, 0xDF, 0xA1, 0x00, 0x11, 0x22 };
 static const uint8_t k_bcast[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
@@ -20,7 +37,8 @@ static espnow_logger_viewer_view_model_t base(void)
     m.running = true;
     m.unique_senders = 2;
     m.event_total = 128;
-    m.log = ESPNOW_LOGGER_VIEWER_LOG_ACTIVE;
+    m.log_requested = true;
+    m.log_control_enabled = true;
     m.channel = 13;
     m.has_local_mac = true;
     memcpy(m.local_mac, k_local, 6);
@@ -65,7 +83,6 @@ static void build_selected_last(cyd_display_screen_t *screen, unsigned frame)
     espnow_logger_viewer_view_model_t m = base();
     m.selected_index = 3;
     m.payload_len = 250;
-    m.log = ESPNOW_LOGGER_VIEWER_LOG_WAITING_CARD;
     espnow_logger_viewer_view_build(screen, &m);
 }
 
@@ -76,7 +93,6 @@ static void build_short_payload(cyd_display_screen_t *screen, unsigned frame)
     m.selected_index = 1;
     m.payload_shown = 9;
     m.payload_len = 9;
-    m.log = ESPNOW_LOGGER_VIEWER_LOG_FAILED;
     espnow_logger_viewer_view_build(screen, &m);
 }
 
@@ -87,7 +103,7 @@ static void build_empty(cyd_display_screen_t *screen, unsigned frame)
     m.event_count = 0;
     m.event_total = 0;
     m.unique_senders = 0;
-    m.log = ESPNOW_LOGGER_VIEWER_LOG_STOPPED;
+    m.log_requested = false;
     m.has_peer_mac = false;
     m.channel = 1;
     espnow_logger_viewer_view_build(screen, &m);
@@ -98,35 +114,89 @@ static void build_stopped(cyd_display_screen_t *screen, unsigned frame)
     (void)frame;
     espnow_logger_viewer_view_model_t m = base();
     m.running = false;
+    m.log_control_enabled = false;
     m.has_local_mac = false;
     m.event_count = 0;
     m.channel = 14;
-    m.log = ESPNOW_LOGGER_VIEWER_LOG_STOPPED;
+    m.log_requested = false;
     espnow_logger_viewer_view_build(screen, &m);
+}
+
+static void build_log_stopped(cyd_display_screen_t *screen, unsigned frame)
+{
+    (void)frame;
+    espnow_logger_viewer_view_model_t m = base();
+    m.log_requested = false;
+    espnow_logger_viewer_view_build(screen, &m);
+}
+
+static void build_problem(cyd_display_screen_t *screen, sd_card_status_icon_kind_t kind, bool requested)
+{
+    espnow_logger_viewer_view_model_t m = base();
+    m.log_requested = requested;
+    m.log_control_enabled = false;
+    m.sd_problem_icon = problem_icon(kind);
+    espnow_logger_viewer_view_build(screen, &m);
+}
+
+static void build_no_card(cyd_display_screen_t *screen, unsigned frame)
+{
+    (void)frame;
+    build_problem(screen, SD_CARD_STATUS_ICON_NO_CARD, true);
+}
+
+static void build_no_filesystem(cyd_display_screen_t *screen, unsigned frame)
+{
+    (void)frame;
+    build_problem(screen, SD_CARD_STATUS_ICON_NO_FILESYSTEM, true);
+}
+
+static void build_full(cyd_display_screen_t *screen, unsigned frame)
+{
+    (void)frame;
+    build_problem(screen, SD_CARD_STATUS_ICON_FULL, true);
+}
+
+static void build_fault(cyd_display_screen_t *screen, unsigned frame)
+{
+    (void)frame;
+    build_problem(screen, SD_CARD_STATUS_ICON_FAULT, true);
+}
+
+static void build_no_card_idle(cyd_display_screen_t *screen, unsigned frame)
+{
+    (void)frame;
+    build_problem(screen, SD_CARD_STATUS_ICON_NO_CARD, false);
 }
 
 static void build_settings(cyd_display_screen_t *screen, unsigned frame)
 {
     (void)frame;
-    const espnow_logger_settings_view_model_t m = { .running = true, .log_requested = true, .auto_start = false };
+    const espnow_logger_settings_view_model_t m = { .auto_start = true };
     espnow_logger_settings_view_build(screen, &m);
 }
 
 static void build_settings_off(cyd_display_screen_t *screen, unsigned frame)
 {
     (void)frame;
-    const espnow_logger_settings_view_model_t m = { .running = false };
+    const espnow_logger_settings_view_model_t m = { .auto_start = false };
     espnow_logger_settings_view_build(screen, &m);
 }
 
 static const cyd_sim_scene_t k_scenes[] = {
-    { "espnow_events", "ESP-NOW 一覧", NULL, build_events },
-    { "espnow_selected_last", "ESP-NOW 長い payload、カード待ち", NULL, build_selected_last },
-    { "espnow_short_payload", "ESP-NOW 短い payload、記録失敗", NULL, build_short_payload },
+    { "espnow_events", "ESP-NOW 一覧、記録中 (●)", NULL, build_events },
+    { "espnow_log_stopped", "ESP-NOW ログ停止中 (■)", NULL, build_log_stopped },
+    { "espnow_sd_no_card", "ESP-NOW カードなし (斜線) + ●", NULL, build_no_card },
+    { "espnow_sd_no_filesystem", "ESP-NOW 未フォーマット (?) + ●", NULL, build_no_filesystem },
+    { "espnow_sd_full", "ESP-NOW 満杯 (メーター) + ●", NULL, build_full },
+    { "espnow_sd_fault", "ESP-NOW 異常 (!) + ●", NULL, build_fault },
+    { "espnow_sd_no_card_idle", "ESP-NOW カードなし (斜線) + ■", NULL, build_no_card_idle },
+    { "espnow_selected_last", "ESP-NOW 長い payload", NULL, build_selected_last },
+    { "espnow_short_payload", "ESP-NOW 短い payload", NULL, build_short_payload },
     { "espnow_empty", "ESP-NOW まだ届いていない", NULL, build_empty },
     { "espnow_stopped", "ESP-NOW 停止中", NULL, build_stopped },
     { "espnow_settings", "ESP-NOW の設定", NULL, build_settings },
-    { "espnow_settings_stopped", "ESP-NOW の設定 (停止中)", NULL, build_settings_off },
+    { "espnow_settings_stopped", "ESP-NOW の設定 (自動開始オフ)", NULL, build_settings_off },
 };
 
 CYD_SIM_REGISTER_SCENES(espnow_viewer, CYD_SIM_ORDER_MAIN_APP + 1, k_scenes);

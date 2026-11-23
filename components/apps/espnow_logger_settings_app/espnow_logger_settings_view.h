@@ -2,8 +2,10 @@
 #define ESPNOW_LOGGER_SETTINGS_VIEW_H
 
 /*
- * English contract: built from a model only, calls no service. Two on/off rows
- * (switches, no "on"/"off" words) under the common settings title and back.
+ * English contract: built from a model only, calls no service. One on/off row
+ * (a switch, no "on"/"off" words) under the common settings title and back.
+ * Starting and stopping the log is the viewer's control, not a setting: it is
+ * not saved, and a boot starts from "auto start".
  */
 
 #include <stdbool.h>
@@ -14,14 +16,9 @@ extern "C" {
 #endif
 
 #define ESPNOW_LOGGER_SETTINGS_ACTION_BACK 0x5101
-#define ESPNOW_LOGGER_SETTINGS_ACTION_LOG 0x5102
 #define ESPNOW_LOGGER_SETTINGS_ACTION_AUTO_START 0x5103
 
 typedef struct {
-    /* The service is running; without it the log cannot be asked for. */
-    bool running;
-    /* What the user asked for: the SD log is recording (or waiting for a card). */
-    bool log_requested;
     bool auto_start;
 } espnow_logger_settings_view_model_t;
 

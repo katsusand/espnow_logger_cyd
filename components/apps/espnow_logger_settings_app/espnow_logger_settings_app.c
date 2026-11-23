@@ -25,13 +25,8 @@ static settings_touch_tracker_t s_tracker;
 
 static esp_err_t settings_show(void)
 {
-    espnow_logger_log_status_t status = { 0 };
     espnow_logger_settings_view_model_t m = { 0 };
 
-    m.running = espnow_logger_is_started();
-    if (espnow_logger_get_log_status(&status) == ESP_OK) {
-        m.log_requested = status.requested;
-    }
     m.auto_start = espnow_logger_get_auto_start_log_enabled();
     espnow_logger_settings_view_build(cyd_ui_screen_borrow(&s_screen_owner), &m);
     return cyd_ui_submit(cyd_ui_screen_of(&s_screen_owner));
@@ -94,18 +89,6 @@ static esp_err_t settings_step(void *ctx)
     switch (action_id) {
     case ESPNOW_LOGGER_SETTINGS_ACTION_BACK:
         return app_shell_return_to(s_return_app);
-    case ESPNOW_LOGGER_SETTINGS_ACTION_LOG: {
-        espnow_logger_log_status_t status = { 0 };
-        esp_err_t err = ESP_OK;
-
-        if (espnow_logger_get_log_status(&status) == ESP_OK) {
-            err = status.requested ? espnow_logger_stop_logging() : espnow_logger_start_logging();
-        }
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "log request failed: %s", esp_err_to_name(err));
-        }
-        return settings_show();
-    }
     case ESPNOW_LOGGER_SETTINGS_ACTION_AUTO_START:
         ESP_RETURN_ON_ERROR(
             espnow_logger_set_auto_start_log_enabled(!espnow_logger_get_auto_start_log_enabled()), TAG,

@@ -6,8 +6,8 @@
 /*
  * 16px text only, on the 8px grid (40 x 30):
  *
- *   0-1    動作中  3分の送信元 2台  計128件              [SD icon]
- *   2-5    チャンネル [−] 13 [＋]      SDログ / 記録中
+ *   0-1    動作中  3分の送信元 2台  計128件
+ *   2-5    チャンネル [−] 13 [＋]      [SD icon  ●/■]  (tap: start / stop the SD log)
  *   6-7    自分 AA:BB:CC:DD:EE:FF
  *   8-9    相手 AA:BB:CC:DD:EE:FF
  *   10-17  event list, one line per event (the selected one is framed)
@@ -16,8 +16,6 @@
  *   22-25  payload, two lines of hex
  *   26-29  [設定] [IMU 開始] [IMU 停止]
  */
-#define VIEW_SD_ICON_COL 38
-#define VIEW_SD_ICON_ROW 0
 #define VIEW_BUTTON_ROW 26
 #define VIEW_BUTTON_ROWS 4
 #define VIEW_PAYLOAD_PER_LINE 10
@@ -27,25 +25,60 @@ static void view_mac(const uint8_t mac[6], char *out, size_t size)
     snprintf(out, size, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-static const char *view_log_text(espnow_logger_viewer_log_t log, uint16_t *color)
+/*
+ * The plain card of the log control, for a card that is fine. sd_card_status
+ * has icons only for problems (sd_card_status_icon_for_state() is NULL for OK),
+ * and those are drawn by the caller; this one is the view's own, the same 12x14
+ * card shape in a 16x16 block on black. Symbols as in sd_card_status_icon_art.c:
+ * . background, O outline, B body, G contacts.
+ */
+#define VIEW_ICON_PX 16
+static const char *const s_card_plain[VIEW_ICON_PX] = {
+    "................",
+    "..OOOOOOOOO.....",
+    "..OBBBBBBBBO....",
+    "..OBBBBBBBBBO...",
+    "..OBBBBBBBBBBO..",
+    "..OBBBBBBBBBBO..",
+    "..OBBBBBBBBBBO..",
+    "..OBBBBBBBBBBO..",
+    "..OBBBBBBBBBBO..",
+    "..OBBBBBBBBBBO..",
+    "..OBBBBBBBBBBO..",
+    "..OBBBBBBBBBBO..",
+    "..OBGBGBGBGBBO..",
+    "..OBGBGBGBGBBO..",
+    "..OOOOOOOOOOOO..",
+    "................",
+};
+
+static uint16_t s_icon_pixels[VIEW_ICON_PX * VIEW_ICON_PX];
+static cyd_display_bitmap_t s_icon_bitmap;
+static bool s_icon_ready;
+
+static uint16_t view_icon_color(char symbol)
 {
-    switch (log) {
-    case ESPNOW_LOGGER_VIEWER_LOG_ACTIVE:
-        *color = CYD_UI_THEME_SUCCESS_SOFT;
-        return "記録中";
-    case ESPNOW_LOGGER_VIEWER_LOG_WAITING_CARD:
-        *color = CYD_UI_THEME_WARNING;
-        return "カード待ち";
-    case ESPNOW_LOGGER_VIEWER_LOG_FAILED:
-        *color = CYD_UI_THEME_DANGER_SOFT;
-        return "失敗";
-    case ESPNOW_LOGGER_VIEWER_LOG_STOPPING:
-        *color = CYD_UI_THEME_WARNING;
-        return "停止中…";
-    default:
-        *color = CYD_UI_THEME_SUBTEXT;
-        return "しない";
+    switch (symbol) {
+    case 'O': return 0xc618; /* light grey */
+    case 'B': return 0x2d7f; /* body: apart from every problem colour of sd_card_status */
+    case 'G': return 0xfea0; /* gold contacts */
+    default: return 0x0000;
     }
+}
+
+const cyd_display_bitmap_t *espnow_logger_viewer_view_sd_ok_icon(void)
+{
+    if (!s_icon_ready) {
+        for (size_t y = 0; y < VIEW_ICON_PX; ++y) {
+            for (size_t x = 0; x < VIEW_ICON_PX; ++x) {
+                s_icon_pixels[y * VIEW_ICON_PX + x] = view_icon_color(s_card_plain[y][x]);
+            }
+        }
+        s_icon_bitmap = (cyd_display_bitmap_t){ .data = s_icon_pixels, .width_px = VIEW_ICON_PX,
+                                                .height_px = VIEW_ICON_PX };
+        s_icon_ready = true;
+    }
+    return &s_icon_bitmap;
 }
 
 static const char *view_status_text(espnow_logger_viewer_status_t status)
@@ -96,13 +129,10 @@ void espnow_logger_viewer_view_build(cyd_display_screen_t *screen, const espnow_
 {
     char line[CYD_DISPLAY_TEXT_MAX_LEN + 1];
     char mac[18];
-    uint16_t log_color = CYD_UI_THEME_SUBTEXT;
-    const char *log_text;
 
     if (screen == NULL || m == NULL) {
         return;
     }
-    log_text = view_log_text(m->log, &log_color);
 
     cyd_ui_screen_clear(screen);
     cyd_ui_add_panel(screen, 0, 0, CYD_DISPLAY_GRID_COLS, CYD_DISPLAY_GRID_ROWS, CYD_UI_THEME_BG, 0, 0, 0);
@@ -121,9 +151,28 @@ void espnow_logger_viewer_view_build(cyd_display_screen_t *screen, const espnow_
                      CYD_UI_THEME_INFO);
     view_button(screen, "＋", 21, 2, 5, 4, ESPNOW_LOGGER_VIEWER_ACTION_CHANNEL_UP,
                 m->channel < ESPNOW_LOGGER_VIEWER_VIEW_CHANNEL_MAX, false);
-    /* The SD log: two short lines at the right of the channel row. */
-    view_label(screen, "SDログ", 28, 2, 11, CYD_DISPLAY_FONT_BODY, CYD_UI_THEME_SUBTEXT);
-    view_label(screen, log_text, 28, 4, 11, CYD_DISPLAY_FONT_BODY_BOLD, log_color);
+    /* The SD log control: the card, and a red dot (asked to record) or a square (not). One button, 12 x 4 cells. */
+    {
+        const bool on = m->log_control_enabled;
+        const bool asked = m->log_requested;
+
+        /* A disabled button is drawn in the disabled colours whatever it is given (as in a greyed switch row). */
+        cyd_ui_add_styled_button(screen, "", 27, 2, 12, 4, CYD_DISPLAY_FONT_BODY_BOLD, CYD_UI_THEME_TEXT,
+                                 on && asked ? CYD_UI_THEME_DANGER_TINT : CYD_UI_THEME_SURFACE,
+                                 on ? (asked ? CYD_UI_THEME_DANGER_SOFT : CYD_UI_THEME_LINE) : CYD_UI_THEME_DISABLED,
+                                 CYD_UI_THEME_BORDER_PX, ESPNOW_LOGGER_VIEWER_ACTION_LOG_TOGGLE, on);
+        /* The card icon is never greyed: it says what is wrong. */
+        cyd_ui_add_icon(screen,
+                        m->sd_problem_icon != NULL ? m->sd_problem_icon : espnow_logger_viewer_view_sd_ok_icon(),
+                        29, 3, 2, 2);
+        if (asked) {
+            const uint16_t dot = on ? CYD_UI_THEME_DANGER : CYD_UI_THEME_DISABLED;
+            cyd_ui_add_panel(screen, 34, 3, 2, 2, dot, dot, 0, 8);
+        } else {
+            const uint16_t square = on ? CYD_UI_THEME_TEXT : CYD_UI_THEME_DISABLED;
+            cyd_ui_add_panel(screen, 34, 3, 2, 2, square, square, 0, 0);
+        }
+    }
 
     if (m->has_local_mac) {
         view_mac(m->local_mac, mac, sizeof(mac));
@@ -206,11 +255,6 @@ void espnow_logger_viewer_view_build(cyd_display_screen_t *screen, const espnow_
                 ESPNOW_LOGGER_VIEWER_ACTION_IMU_START, imu, true);
     view_button(screen, "IMU 停止", 27, VIEW_BUTTON_ROW, 12, VIEW_BUTTON_ROWS, ESPNOW_LOGGER_VIEWER_ACTION_IMU_STOP,
                 imu, false);
-
-    /* Last, so the widgets before it keep their positions whether or not it is there. */
-    if (m->sd_icon != NULL) {
-        (void)cyd_ui_add_icon(screen, m->sd_icon, VIEW_SD_ICON_COL, VIEW_SD_ICON_ROW, 2, 2);
-    }
 }
 
 bool espnow_logger_viewer_view_event_at(int16_t x, int16_t y, size_t event_count, size_t *index)

@@ -24,6 +24,7 @@ extern "C" {
 #define ESPNOW_LOGGER_VIEWER_ACTION_SETTINGS 0x5003
 #define ESPNOW_LOGGER_VIEWER_ACTION_IMU_START 0x5004
 #define ESPNOW_LOGGER_VIEWER_ACTION_IMU_STOP 0x5005
+#define ESPNOW_LOGGER_VIEWER_ACTION_LOG_TOGGLE 0x5006
 
 #define ESPNOW_LOGGER_VIEWER_VIEW_EVENTS 4
 #define ESPNOW_LOGGER_VIEWER_VIEW_PAYLOAD_BYTES 20
@@ -41,15 +42,6 @@ typedef enum {
     ESPNOW_LOGGER_VIEWER_STATUS_RECV,
 } espnow_logger_viewer_status_t;
 
-/* The SD log, as the user sees it. Mirrors espnow_logger_log_state_t. */
-typedef enum {
-    ESPNOW_LOGGER_VIEWER_LOG_STOPPED = 0,
-    ESPNOW_LOGGER_VIEWER_LOG_WAITING_CARD,
-    ESPNOW_LOGGER_VIEWER_LOG_ACTIVE,
-    ESPNOW_LOGGER_VIEWER_LOG_FAILED,
-    ESPNOW_LOGGER_VIEWER_LOG_STOPPING,
-} espnow_logger_viewer_log_t;
-
 typedef struct {
     bool is_rx;
     espnow_logger_viewer_status_t status;
@@ -66,9 +58,19 @@ typedef struct {
     /* Distinct senders in the last 3 minutes, and every frame kept. */
     unsigned unique_senders;
     unsigned event_total;
-    espnow_logger_viewer_log_t log;
-    /* sd_card_status_icon_for_state(); NULL when the card needs no icon. */
-    const cyd_display_bitmap_t *sd_icon;
+    /*
+     * The log control takes a tap: the service runs and the card is OK. Otherwise it is greyed out (the
+     * request mark stays, the card icon keeps its colours).
+     */
+    bool log_control_enabled;
+    /* What the user asked for: the SD log is to be recorded (the red dot), or not (the square). */
+    bool log_requested;
+    /*
+     * sd_card_status_icon_for_state() of the card: the icon of its problem, 16x16 on black, which must live
+     * as long as the app (cyd_display_bitmap_t). NULL while the card is fine: the view draws its own plain
+     * card. Independent of log_requested.
+     */
+    const cyd_display_bitmap_t *sd_problem_icon;
 
     uint8_t channel;
     bool has_local_mac;
@@ -84,6 +86,9 @@ typedef struct {
     size_t payload_shown;
     size_t payload_len;
 } espnow_logger_viewer_view_model_t;
+
+/* The plain card the view draws while the card is fine (green, 16x16 RGB565, static). */
+const cyd_display_bitmap_t *espnow_logger_viewer_view_sd_ok_icon(void);
 
 void espnow_logger_viewer_view_build(cyd_display_screen_t *screen, const espnow_logger_viewer_view_model_t *m);
 

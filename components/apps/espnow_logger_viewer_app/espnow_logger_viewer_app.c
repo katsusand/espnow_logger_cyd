@@ -74,20 +74,15 @@ static unsigned viewer_count_unique_senders(void)
     return unique;
 }
 
-static espnow_logger_viewer_log_t viewer_log_state(void)
+/* What the user asked for (the dot or the square), whatever the card does. */
+static bool viewer_log_requested(void)
 {
     espnow_logger_log_status_t status;
 
     if (espnow_logger_get_log_status(&status) != ESP_OK) {
-        return ESPNOW_LOGGER_VIEWER_LOG_STOPPED;
+        return false;
     }
-    switch (status.state) {
-    case ESPNOW_LOGGER_LOG_WAITING_CARD: return ESPNOW_LOGGER_VIEWER_LOG_WAITING_CARD;
-    case ESPNOW_LOGGER_LOG_ACTIVE: return ESPNOW_LOGGER_VIEWER_LOG_ACTIVE;
-    case ESPNOW_LOGGER_LOG_FAILED: return ESPNOW_LOGGER_VIEWER_LOG_FAILED;
-    case ESPNOW_LOGGER_LOG_STOPPING: return ESPNOW_LOGGER_VIEWER_LOG_STOPPING;
-    default: return ESPNOW_LOGGER_VIEWER_LOG_STOPPED;
-    }
+    return status.requested;
 }
 
 /* Built in a static: it is about 0.2KB and only the shell task touches it. */
@@ -101,8 +96,11 @@ static void viewer_fill_model(void)
     m->running = espnow_logger_is_started();
     m->unique_senders = viewer_count_unique_senders();
     m->event_total = (unsigned)espnow_logger_get_event_count();
-    m->log = viewer_log_state();
-    m->sd_icon = sd_card_status_icon_for_state(sd_card_status_get_state());
+    m->log_requested = viewer_log_requested();
+    /* The icon of the card's problem; NULL while it is fine. Its pixels live for the whole run. */
+    /* Only an OK card takes the request: a problem, or no SD support at all (DISABLED), greys it out. */
+    m->log_control_enabled = m->running && sd_card_status_get_state() == SD_CARD_STATUS_OK;
+    m->sd_problem_icon = sd_card_status_icon_for_state(sd_card_status_get_state());
     m->channel = espnow_logger_get_channel();
     m->has_local_mac = espnow_logger_get_local_mac(m->local_mac) == ESP_OK;
     m->has_peer_mac = espnow_logger_has_configured_peer() &&
@@ -212,6 +210,19 @@ static esp_err_t viewer_handle_action(uint16_t action_id)
             s_render_needed = true;
         }
         return ESP_OK;
+    case ESPNOW_LOGGER_VIEWER_ACTION_LOG_TOGGLE: {
+        /* A greyed button is not hit-tested; this covers a card that went bad between the draw and the tap. */
+        if (sd_card_status_get_state() != SD_CARD_STATUS_OK) {
+            return ESP_OK;
+        }
+        /* A request already made stays as it is when the card goes: it carries on when the card is back. */
+        err = viewer_log_requested() ? espnow_logger_stop_logging() : espnow_logger_start_logging();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "log request failed: %s", esp_err_to_name(err));
+        }
+        s_render_needed = true;
+        return ESP_OK;
+    }
     case ESPNOW_LOGGER_VIEWER_ACTION_IMU_START:
     case ESPNOW_LOGGER_VIEWER_ACTION_IMU_STOP:
         err = action_id == ESPNOW_LOGGER_VIEWER_ACTION_IMU_START ? espnow_logger_send_imu_stream_start_request()

@@ -236,7 +236,8 @@ run_case "Launcher and clock screens" "${BUILD_DIR}/test_launcher_clock_view"
 ESPNOW_VIEWER="${PROJECT_ROOT}/components/apps/espnow_logger_viewer_app"
 ESPNOW_SETTINGS="${PROJECT_ROOT}/components/apps/espnow_logger_settings_app"
 "${CC}" "${CFLAGS[@]}" -std=gnu11 "${UI_TEST_INCLUDES[@]}" -I"${ESPNOW_VIEWER}" -I"${ESPNOW_SETTINGS}" \
-    "${UI_TEST_SRCS[@]}" "${ESPNOW_VIEWER}/espnow_logger_viewer_view.c" \
+    -I"${SD_CARD_STATUS}" "${UI_TEST_SRCS[@]}" "${SD_CARD_STATUS}/sd_card_status_icon_art.c" \
+    "${ESPNOW_VIEWER}/espnow_logger_viewer_view.c" \
     "${ESPNOW_SETTINGS}/espnow_logger_settings_view.c" "${SCRIPT_DIR}/test_espnow_viewer_view.c" \
     -o "${BUILD_DIR}/test_espnow_viewer_view"
 
