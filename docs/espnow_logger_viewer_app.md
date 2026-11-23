@@ -27,7 +27,7 @@ esp_err_t espnow_logger_viewer_app_register(void);
 
 ```text
 rows 0-1    動作中  3分の送信元 2台  計128件
-rows 2-5    チャンネル  [−] 13 [＋]      [SD カード ●/■] (タップで SD ログの開始 / 停止)
+rows 2-5    チャンネル  [−] 13 [＋]      [SD カード ● / ■] (タップで SD ログの開始 / 停止)
 rows 6-7    自分 AA:BB:CC:DD:EE:FF
 rows 8-9    相手 AA:BB:CC:DD:EE:FF
 rows 10-17  イベント一覧 (新しい順、4 件、選んだ行は枠で囲む)
@@ -39,13 +39,13 @@ rows 26-29  [設定] [IMU 開始] [IMU 停止]
 一覧の 1 行は `RX 13 UC 38B -61 00:11:22` (方向、channel、BC/UC、長さ、RSSI、送信元の下位 3 バイト) です。TX は方向のあとに送信結果 (`待ち` / `OK` / `NG`) が入り、RSSI はありません。失敗 (`NG`) の行は危険色です。
 
 - 「3分の送信元」は、最新のフレームから 3 分以内に受けたフレームの送信元 MAC の種類数 (broadcast は数えない)。「計」は service が持っている履歴の件数 (上限 `CONFIG_ESPNOW_LOGGER_EVENT_HISTORY_SIZE`)
-- SD ログのコントロール (チャンネル行の右、12 × 4 マス = 96 × 32px の 1 つのボタン): SD カードの絵と、赤い丸「●」(記録を求めている) か四角「■」(求めていない) を並べる。タップで開始 / 停止を切り替える (`espnow_logger_start_logging()` / `stop_logging()`)。文字のラベルは無い
-  - ●/■ は「記録を求めているか」(`espnow_logger_log_status_t.requested`) だけを表す。service が動いていないときは押せない
+- SD ログのコントロール (チャンネル行の右、12 × 4 マス = 96 × 32px の 1 つのボタン): SD カードの絵と、赤い丸「●」、スラッシュ「/」、四角「■」を常に並べ、記録を求めているか (`requested`) は枠の色だけで示す (記録中は赤い枠と地、停止中は白い枠)。タップで開始 / 停止を切り替える (`espnow_logger_start_logging()` / `stop_logging()`)。文字は添えない (この画面は文字が多いため)
+  - 枠の色は `espnow_logger_log_status_t.requested` による。service が動いていないときは押せない
   - カードの絵は `sd_card_status` の状態で決まる。問題があるとき (`NO_CARD` / `NO_FILESYSTEM` / `FULL` / `FAULT`) は、既存の状態アイコン (`sd_card_status_icon_for_state()`: 斜線のカード、黄の `?`、満タンのメーター、赤の `!`) をそのまま出す。正常 (`OK` / `DISABLED`、関数は `NULL`) のときは、view が持つふつうのカードの絵 (形は同じ 12×14 のカード) を出す。service の `FAILED` では絵を変えない
   - アイコンは `cyd_display_bitmap_t` の寿命の決まり (使い終わるまで生きている) どおり、`sd_card_status_icon.c` の static を渡す。view の model には `sd_problem_icon` (問題がなければ `NULL`) として入る。カードの状態が変わると (`sd_card_status_get_revision()`) 描き直す
-  - ●/■ は「記録を求めているか」だけを表し、カードの絵とは独立
-  - **グレーアウト**: コントロールが押せるのは、service が動いていて `sd_card_status` が `OK` のときだけ。カードの問題 (`NO_CARD` / `NO_FILESYSTEM` / `FULL` / `FAULT`) のあいだと、SD 非対応のビルド (`DISABLED`。絵はふつうのカード) では、枠・地・●/■ を無効の配色 (`CYD_UI_THEME_DISABLED`) にして、タップしても何も起きない (ボタンは当たり判定から外れ、確定処理でも `OK` でなければ無視する)。カードの絵だけは色を変えず、何が問題かを読み取れる
-  - すでに求めている (●) まま問題の状態になったとき (起動時の自動開始でカードが無い、記録中の抜き取り) は、●をグレーで残す。要求はそのままなので、カードが戻れば続きから始まる (`WAITING_CARD`)。この間は画面から取り消せない。取り消したいときは設定の「起動時に自動で始める」で調整する
+  - 枠の色は「記録を求めているか」だけを表し、カードの絵とは独立
+  - **グレーアウト**: コントロールが押せるのは、service が動いていて `sd_card_status` が `OK` のときだけ。カードの問題 (`NO_CARD` / `NO_FILESYSTEM` / `FULL` / `FAULT`) のあいだと、SD 非対応のビルド (`DISABLED`。絵はふつうのカード) では、枠・地・●と■を無効の配色 (`CYD_UI_THEME_DISABLED`) にして、タップしても何も起きない (ボタンは当たり判定から外れ、確定処理でも `OK` でなければ無視する)。カードの絵だけは色を変えず、何が問題かを読み取れる
+  - すでに求めている (●) まま問題の状態になったとき (起動時の自動開始でカードが無い、記録中の抜き取り) は、赤い枠だけグレーにして残す (●と■はもともと両方出ている)。要求はそのままなので、カードが戻れば続きから始まる (`WAITING_CARD`)。この間は画面から取り消せない。取り消したいときは設定の「起動時に自動で始める」で調整する
   - 右上の SD アイコンは、このコントロールが兼ねるので外した
   - 求めた状態は保存しない。再起動すると「起動時に自動で始める」の値に戻る
 - [IMU 開始] / [IMU 停止] は service が動いているときだけ押せる。peer が無いと service が broadcast で送る
@@ -88,7 +88,7 @@ peer MAC と既定 channel の編集は作っていません。channel は viewe
 
 ## Simulator
 
-`tools/cyd_sim/scenes/espnow_viewer.c` に、viewer (一覧と記録中 ●、ログ停止中 ■、カードの問題 4 種 (`espnow_sd_no_card` / `_no_filesystem` / `_full` / `_fault`) + ●、斜線 + ■、長い payload、短い payload、まだ届いていない、service 停止中)。問題のアイコンは `sd_card_status_icon_art.c` (描画に依存しない部分) を取り込み、実機と同じ絵を出す と設定 (自動開始のオン・オフ) のシーンがあります。service は実機専用なので、model を手で組んで描きます。
+`tools/cyd_sim/scenes/espnow_viewer.c` に、viewer (一覧と記録中の赤枠、ログ停止中の白枠、カードの問題 4 種 (`espnow_sd_no_card` / `_no_filesystem` / `_full` / `_fault`)、長い payload、短い payload、まだ届いていない、service 停止中) と設定 (自動開始のオン・オフ) のシーンがあります。問題のアイコンは `sd_card_status_icon_art.c` (描画に依存しない部分) を取り込み、実機と同じ絵を出します。service は実機専用なので、model を手で組んで描きます。
 
 ```bash
 tools/cyd_sim/build/cyd_sim --export /tmp/cyd_screens --scale 2

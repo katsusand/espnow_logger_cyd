@@ -7,7 +7,7 @@
  * 16px text only, on the 8px grid (40 x 30):
  *
  *   0-1    動作中  3分の送信元 2台  計128件
- *   2-5    チャンネル [−] 13 [＋]      [SD icon  ●/■]  (tap: start / stop the SD log)
+ *   2-5    チャンネル [−] 13 [＋]      [SD icon ● / ■] (red frame while recording)  (tap: start / stop the SD log)
  *   6-7    自分 AA:BB:CC:DD:EE:FF
  *   8-9    相手 AA:BB:CC:DD:EE:FF
  *   10-17  event list, one line per event (the selected one is framed)
@@ -159,19 +159,19 @@ void espnow_logger_viewer_view_build(cyd_display_screen_t *screen, const espnow_
         /* A disabled button is drawn in the disabled colours whatever it is given (as in a greyed switch row). */
         cyd_ui_add_styled_button(screen, "", 27, 2, 12, 4, CYD_DISPLAY_FONT_BODY_BOLD, CYD_UI_THEME_TEXT,
                                  on && asked ? CYD_UI_THEME_DANGER_TINT : CYD_UI_THEME_SURFACE,
-                                 on ? (asked ? CYD_UI_THEME_DANGER_SOFT : CYD_UI_THEME_LINE) : CYD_UI_THEME_DISABLED,
+                                 on ? (asked ? CYD_UI_THEME_DANGER_SOFT : CYD_UI_THEME_TEXT) : CYD_UI_THEME_DISABLED,
                                  CYD_UI_THEME_BORDER_PX, ESPNOW_LOGGER_VIEWER_ACTION_LOG_TOGGLE, on);
         /* The card icon is never greyed: it says what is wrong. */
         cyd_ui_add_icon(screen,
                         m->sd_problem_icon != NULL ? m->sd_problem_icon : espnow_logger_viewer_view_sd_ok_icon(),
-                        29, 3, 2, 2);
-        if (asked) {
-            const uint16_t dot = on ? CYD_UI_THEME_DANGER : CYD_UI_THEME_DISABLED;
-            cyd_ui_add_panel(screen, 34, 3, 2, 2, dot, dot, 0, 8);
-        } else {
-            const uint16_t square = on ? CYD_UI_THEME_TEXT : CYD_UI_THEME_DISABLED;
-            cyd_ui_add_panel(screen, 34, 3, 2, 2, square, square, 0, 0);
-        }
+                        28, 3, 2, 2);
+        /* Both marks always: the record dot and the stop square. Only the frame tells the state. */
+        cyd_ui_add_panel(screen, 31, 3, 2, 2, on ? CYD_UI_THEME_DANGER : CYD_UI_THEME_DISABLED,
+                         on ? CYD_UI_THEME_DANGER : CYD_UI_THEME_DISABLED, 0, 8);
+        cyd_ui_add_label(screen, "/", 33, 2, 2, 4, CYD_DISPLAY_ALIGN_CENTER, CYD_DISPLAY_FONT_BODY_BOLD,
+                         on ? CYD_UI_THEME_TEXT : CYD_UI_THEME_DISABLED);
+        cyd_ui_add_panel(screen, 35, 3, 2, 2, on ? CYD_UI_THEME_TEXT : CYD_UI_THEME_DISABLED,
+                         on ? CYD_UI_THEME_TEXT : CYD_UI_THEME_DISABLED, 0, 0);
     }
 
     if (m->has_local_mac) {
