@@ -2,6 +2,8 @@
 # in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.22)
 
+string(TIMESTAMP APP_BUILD_UNIX_TIME "%s" UTC)
+
 set(APP_WIFI_STA_REQUESTED ON)
 if(DEFINED ENV{APP_WIFI_STA})
     string(TOLOWER "$ENV{APP_WIFI_STA}" APP_WIFI_STA_ENV)
@@ -41,6 +43,8 @@ idf_build_set_property(MINIMAL_BUILD ON)
 if(DEFINED ENV{DEV} AND NOT "$ENV{DEV}" STREQUAL "" AND NOT "$ENV{DEV}" STREQUAL "0")
     add_compile_definitions(APP_DEV=1)
 endif()
+
+add_compile_definitions(APP_BUILD_UNIX_TIME=${APP_BUILD_UNIX_TIME})
 
 if(APP_WIFI_STA_ENABLED)
     add_compile_definitions(APP_WIFI_STA_ENABLED=1)

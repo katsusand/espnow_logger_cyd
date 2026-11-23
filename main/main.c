@@ -1,7 +1,7 @@
 #include "esp_check.h"
-#include "cyd_clock_composition.h"
+#include "espnow_logger_composition.h"
 
 void app_main(void)
 {
-    ESP_ERROR_CHECK(cyd_clock_composition_start());
+    ESP_ERROR_CHECK(espnow_logger_composition_start());
 }
