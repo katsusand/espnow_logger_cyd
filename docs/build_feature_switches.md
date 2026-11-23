@@ -70,7 +70,33 @@ English supplement: Every place that reads `APP_WIFI_STA` must lower-case it bef
 
 `APP_WIFI_STA=0` の時、clock composition は Wi-Fi startup 群を起動しません。アプリ側の API 呼び出しは維持できますが、Wi-Fi 接続、NTP 同期、Wi-Fi setup は動作しません。
 
-English supplement: `APP_WIFI_STA=0` is currently exclusive with STA Wi-Fi. Future ESPNOW support should use a separate build feature switch and avoid assuming that ESPNOW and STA can share the same driver lifecycle.
+English supplement: `APP_WIFI_STA=0` is currently exclusive with STA Wi-Fi. ESPNOW has its own switch, `APP_ESPNOW` (see below), and does not assume that ESPNOW and STA can share the same driver lifecycle.
+
+## ESP-NOW Logger
+
+ESP-NOW logger service（`espnow_logger`）は `APP_ESPNOW` 環境変数で切り替えます。書式は `APP_WIFI_STA` と同じです。
+
+ESP-NOW 有効ビルド（既定）:
+
+```bash
+source ~/.espressif/tools/activate_idf_v5.5.6.sh || true
+APP_WIFI_STA=0 python "$IDF_PATH/tools/idf.py" reconfigure
+APP_WIFI_STA=0 DEV=1 ninja -C build
+```
+
+ESP-NOW 無効ビルド:
+
+```bash
+source ~/.espressif/tools/activate_idf_v5.5.6.sh || true
+APP_ESPNOW=0 python "$IDF_PATH/tools/idf.py" reconfigure
+APP_ESPNOW=0 DEV=1 ninja -C build
+```
+
+`APP_ESPNOW=0` では、`espnow_logger` が stub 実装へ切り替わります。API は同じで、`esp_wifi` / `esp_now` / `sd_card_writer` などへの依存が無くなります。packet の解釈と文字列整形の純 C（`espnow_sensor_packet.c`、`espnow_log_format.c`）は stub でも含まれます。
+
+値は大文字小文字を区別せず、`0` / `false` / `off` / `no` のいずれかで無効になります。トップの `CMakeLists.txt` と component の `CMakeLists.txt` は、`APP_WIFI_STA` と同じ判定を使います。
+
+English supplement: `APP_ESPNOW` and `APP_WIFI_STA` are independent switches, but the ESP-NOW service owns the Wi-Fi driver, so a build that has both on starts neither: `espnow_logger_start()` returns `ESP_ERR_NOT_SUPPORTED` until coexistence is implemented. Use `APP_WIFI_STA=0` to run ESP-NOW.
 
 ## Kconfig Role
 

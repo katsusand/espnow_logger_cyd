@@ -1,0 +1,154 @@
+menu "ESP-NOW Logger"
+
+    config ESPNOW_LOGGER_ENABLED
+        bool "Enable ESP-NOW logger service"
+        default y
+        help
+            ESP-NOW logger service を有効にします。
+            English supplement: This controls runtime behavior inside the compiled service. Whether it is built at all is decided by APP_ESPNOW (docs/build_feature_switches.md).
+
+    config ESPNOW_LOGGER_WIFI_CHANNEL
+        int "Default ESP-NOW Wi-Fi channel"
+        default 13
+        range 1 14
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            保存された channel が無いときに使う、ESP-NOW の固定 Wi-Fi channel です。
+            English supplement: The channel saved in NVS wins once one has been set.
+
+    config ESPNOW_LOGGER_SEND_STARTUP_FRAMES
+        bool "Send startup broadcast/unicast frames"
+        default y
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            起動完了時に broadcast frame を送り、peer MAC 設定時は unicast frame も送ります。
+
+    config ESPNOW_LOGGER_PERIODIC_TX_INTERVAL_MS
+        int "Periodic TX interval (ms, 0 disables)"
+        default 10000
+        range 0 3600000
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            周期送信の間隔です。0 で periodic TX を無効にします。
+            English supplement: Both broadcast and configured unicast frames follow this cadence.
+
+    config ESPNOW_LOGGER_BROADCAST_PAYLOAD
+        string "Broadcast payload"
+        default "espnow_logger:broadcast"
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            broadcast 送信に使う ASCII payload です。
+
+    config ESPNOW_LOGGER_UNICAST_PEER_MAC
+        string "Default unicast peer MAC"
+        default ""
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            保存された peer が無いときに使う、unicast 送信先の MAC アドレスです。空なら unicast 送信は行いません。
+            形式は `AA:BB:CC:DD:EE:FF` です。
+
+    config ESPNOW_LOGGER_UNICAST_PAYLOAD
+        string "Unicast payload"
+        default "espnow_logger:unicast"
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            指定 peer 向け unicast 送信に使う ASCII payload です。
+
+    config ESPNOW_LOGGER_EVENT_HISTORY_SIZE
+        int "Event history size"
+        default 64
+        range 8 256
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            UI やデバッグ用途で保持する最近イベント数です。
+            English supplement: Stored as an in-memory ring buffer, newest events overwrite oldest ones.
+
+    config ESPNOW_LOGGER_TASK_STACK_SIZE
+        int "Logger task stack size"
+        default 4096
+        range 2048 16384
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            periodic TX task の stack size です。
+
+    config ESPNOW_LOGGER_TASK_PRIORITY
+        int "Logger task priority"
+        default 5
+        range 1 24
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            periodic TX task の priority です。
+
+    config ESPNOW_LOGGER_LOG_TASK_STACK_SIZE
+        int "Log control task stack size"
+        default 4096
+        range 3072 16384
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            SD ログの stream を開閉する task の stack size です。この task はカードへ書きません。
+            ディレクトリを走査して次の file 番号を決める処理は sd_card_writer の task で動きます。
+
+    config ESPNOW_LOGGER_LOG_TASK_PRIORITY
+        int "Log control task priority"
+        default 3
+        range 1 24
+        depends on ESPNOW_LOGGER_ENABLED
+
+    config ESPNOW_LOGGER_LOG_POLL_MS
+        int "Log control poll interval (ms)"
+        default 500
+        range 100 5000
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            カードの状態（sd_card_status）を見て stream を開閉する間隔です。start / stop の要求は待たずに起こします。
+
+    config ESPNOW_LOGGER_LOG_RETRY_MS
+        int "Retry interval after a stream failure (ms)"
+        default 10000
+        range 1000 600000
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            stream が失敗した、または開けなかったあと、もう一度開くまでの待ち時間です。
+
+    config ESPNOW_LOGGER_SENSOR_BUFFER_KB
+        int "sensor.bin stream buffer (KB)"
+        default 16
+        range 4 128
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            sensor.bin の stream が RAM に溜められる量です。「書き込みレート × SD が止まる時間」より大きくします。
+            English supplement: See docs/sd_card_writer.md (Buffer Sizing). A full buffer drops whole records and counts them.
+
+    config ESPNOW_LOGGER_CSV_BUFFER_KB
+        int "espnow.csv stream buffer (KB)"
+        default 8
+        range 2 64
+        depends on ESPNOW_LOGGER_ENABLED
+
+    config ESPNOW_LOGGER_SENSOR_MAX_FILE_KB
+        int "sensor.bin max file size (KB)"
+        default 32768
+        range 256 1048576
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            これを超える前に、次の番号の file へ切り替えます（record の境界で切り替えます）。
+            English supplement: FAT32 caps a file at 4 GB; stay well below it.
+
+    config ESPNOW_LOGGER_CSV_MAX_FILE_KB
+        int "espnow.csv max file size (KB)"
+        default 1024
+        range 64 1048576
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            これを超える前に、次の番号の file へ切り替えます。新しい file は header 行から始まります。
+
+    config ESPNOW_LOGGER_SD_SYNC_INTERVAL_MS
+        int "SD sync interval (ms)"
+        default 2000
+        range 100 60000
+        depends on ESPNOW_LOGGER_ENABLED
+        help
+            書いたデータが sync されずに待つ最長時間です。電源断で失う最大の範囲になります。
+            English supplement: Passed to sd_card_writer as each stream's flush_interval_ms.
+
+endmenu

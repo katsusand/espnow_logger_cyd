@@ -120,6 +120,22 @@ WIFI_CONNECTION="${PROJECT_ROOT}/components/services/wifi_connection"
 
 run_case "radio manager failure reasons" "${BUILD_DIR}/test_radio_manager_failure"
 
+# espnow_logger: the packet layout, which frames are records and which are errors,
+# the record CRC, the CSV row and the log file names. Pure C; the radio and the
+# card are not involved.
+ESPNOW_LOGGER="${PROJECT_ROOT}/components/services/espnow_logger"
+"${CC}" "${CFLAGS[@]}" -I"${ESPNOW_LOGGER}/include" \
+    "${ESPNOW_LOGGER}/espnow_sensor_packet.c" "${SCRIPT_DIR}/test_espnow_sensor_packet.c" \
+    -o "${BUILD_DIR}/test_espnow_sensor_packet"
+
+run_case "ESP-NOW sensor packets and records" "${BUILD_DIR}/test_espnow_sensor_packet"
+
+"${CC}" "${CFLAGS[@]}" -std=gnu11 -I"${ESPNOW_LOGGER}/include" \
+    "${ESPNOW_LOGGER}/espnow_log_format.c" "${SCRIPT_DIR}/test_espnow_log_format.c" \
+    -o "${BUILD_DIR}/test_espnow_log_format"
+
+run_case "ESP-NOW log text and file names" "${BUILD_DIR}/test_espnow_log_format"
+
 # Japanese UI: the display text rules and font tables every UI test links.
 # A screen's layout test adds its view sources and include path to these.
 CYD_DISPLAY="${PROJECT_ROOT}/components/platform/cyd_display"

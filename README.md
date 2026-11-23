@@ -489,6 +489,8 @@ source ~/.espressif/tools/activate_idf_v5.5.6.sh; python "$IDF_PATH/tools/idf.py
 - [SD Card Files](docs/sd_card_files.md)
 - [Error Log Store](docs/error_log_store.md)
 - [Boot ID](docs/boot_id.md)
+- [ESP-NOW Logger](docs/espnow_logger.md)
+- [Sensor Log Format](docs/sensor_log_format.md)
 - [CYD Clock App](docs/cyd_clock_app.md)
 - [CYD Clock Alarm](docs/cyd_clock_alarm.md)
 - [CYD Clock Composition](docs/cyd_clock_composition.md)

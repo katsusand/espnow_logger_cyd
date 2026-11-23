@@ -14,6 +14,18 @@ if(DEFINED ENV{APP_WIFI_STA})
 endif()
 set(APP_WIFI_STA_ENABLED ${APP_WIFI_STA_REQUESTED} CACHE BOOL "Build Wi-Fi STA feature" FORCE)
 
+set(APP_ESPNOW_REQUESTED ON)
+if(DEFINED ENV{APP_ESPNOW})
+    string(TOLOWER "$ENV{APP_ESPNOW}" APP_ESPNOW_ENV)
+    if(APP_ESPNOW_ENV STREQUAL "0" OR
+       APP_ESPNOW_ENV STREQUAL "false" OR
+       APP_ESPNOW_ENV STREQUAL "off" OR
+       APP_ESPNOW_ENV STREQUAL "no")
+        set(APP_ESPNOW_REQUESTED OFF)
+    endif()
+endif()
+set(APP_ESPNOW_ENABLED ${APP_ESPNOW_REQUESTED} CACHE BOOL "Build ESP-NOW logger feature" FORCE)
+
 set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/components/apps"
     "${CMAKE_CURRENT_LIST_DIR}/components/framework"
@@ -34,6 +46,12 @@ if(APP_WIFI_STA_ENABLED)
     add_compile_definitions(APP_WIFI_STA_ENABLED=1)
 else()
     add_compile_definitions(APP_WIFI_STA_ENABLED=0)
+endif()
+
+if(APP_ESPNOW_ENABLED)
+    add_compile_definitions(APP_ESPNOW_ENABLED=1)
+else()
+    add_compile_definitions(APP_ESPNOW_ENABLED=0)
 endif()
 
 project(esp32_project)
