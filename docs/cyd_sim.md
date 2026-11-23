@@ -87,6 +87,7 @@ English contract: the shared simulator sources (`sim_main.cpp`, `sim_catalog.h`,
 - `pin_*`: 設定の PIN の画面 (`settings_pin_view.c`)。入力、違う、待ち時間、新しい PIN の 1 回目・2 回目、不一致、解除のボタン、起動時にやめたとき
 - `info_*`: システム情報 (`system_info_view.c`) の全ページ
 - `wifi_*`: Wi-Fi 設定 (`cyd_wifi_setup_view.c`) の一覧・検索中・見つからない・エラー・接続中・保存・失敗 (理由別)
+- `espnow_*`: ESP-NOW の viewer と設定 (`espnow_logger_viewer_view.c`、`espnow_logger_settings_view.c`)。service は実機専用なので model を手で組む
 - `specimen_*`: 書体見本、テーマ色とボタン、はみ出しの扱い
 
 ## Writing Simulator-Friendly Apps

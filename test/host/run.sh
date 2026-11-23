@@ -224,6 +224,16 @@ CLOCK_SETTINGS="${PROJECT_ROOT}/components/apps/cyd_clock_settings_app"
 
 run_case "Launcher and clock screens" "${BUILD_DIR}/test_launcher_clock_view"
 
+# ESP-NOW viewer and its settings: widest frames, every log state, button states
+ESPNOW_VIEWER="${PROJECT_ROOT}/components/apps/espnow_logger_viewer_app"
+ESPNOW_SETTINGS="${PROJECT_ROOT}/components/apps/espnow_logger_settings_app"
+"${CC}" "${CFLAGS[@]}" -std=gnu11 "${UI_TEST_INCLUDES[@]}" -I"${ESPNOW_VIEWER}" -I"${ESPNOW_SETTINGS}" \
+    "${UI_TEST_SRCS[@]}" "${ESPNOW_VIEWER}/espnow_logger_viewer_view.c" \
+    "${ESPNOW_SETTINGS}/espnow_logger_settings_view.c" "${SCRIPT_DIR}/test_espnow_viewer_view.c" \
+    -o "${BUILD_DIR}/test_espnow_viewer_view"
+
+run_case "ESP-NOW viewer screens" "${BUILD_DIR}/test_espnow_viewer_view"
+
 if [[ "${status}" -eq 0 ]]; then
     echo "all host tests passed"
 else
