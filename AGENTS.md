@@ -2,6 +2,11 @@
 
 This file is for AI assistants; it is kept terse on purpose. Human docs: README.md, docs/.
 
+## Repo
+- Derived from esp32_project (remote `upstream`); product = ESP-NOW logger (`components/products/espnow_logger_composition`). Clock components stay in tree, unregistered.
+- Fix framework/platform/shared services in esp32_project first, then merge `upstream/main` here. Do not patch them only here.
+- ESP-NOW does not start in Wi-Fi-enabled builds (`espnow_logger_start()` returns `ESP_ERR_NOT_SUPPORTED`); the product is built with `APP_WIFI_STA=0` until coexistence is done.
+
 ## Source
 - Design intent lives in `main/` and `components/` (then `docs/`, `README.md`). `build*/` is generated: read it only for build/link issues, never edit it.
 - Third-party code: `third_party/` (LovyanGFX is a git submodule; don't edit, bump the submodule instead).

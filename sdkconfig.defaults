@@ -41,6 +41,16 @@ CONFIG_ESP32_WIFI_STA_AUTH_WPA2_PSK=y
 CONFIG_APP_SHELL_TASK_STACK_SIZE=10240
 
 #
+# ESP-NOW logger. A logger listens: it sends nothing by itself at boot or
+# periodically (the Kconfig defaults would send a frame at startup and every
+# 10 s). The product composition also disables idle return at run time; this
+# keeps the shell's own default (60 s) from applying before it does.
+#
+CONFIG_ESPNOW_LOGGER_SEND_STARTUP_FRAMES=n
+CONFIG_ESPNOW_LOGGER_PERIODIC_TX_INTERVAL_MS=0
+CONFIG_APP_SHELL_IDLE_RETURN_TIMEOUT_SECONDS=0
+
+#
 # FAT: long file names. The error log writes ERR_2026-10-07_01.LOG. error_log_store
 # stops the build with an #error when this is off, because every open would
 # otherwise fail with FR_INVALID_NAME and the log would silently never be written.

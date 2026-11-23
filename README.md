@@ -1,4 +1,10 @@
-# ESP32 CYD Clock
+# ESP32 CYD Clock / ESP-NOW Logger
+
+> **このリポジトリについて**: これは [esp32_project](https://github.com/katsusand/esp32_project)(`upstream`)の派生で、製品は **ESP-NOW logger** です。ESP-NOW のフレームを受信して一覧表示し、SD カードへ記録します。起動は `components/products/espnow_logger_composition/` ([ESP-NOW Logger Composition](docs/espnow_logger_composition.md))、表示は [ESP-NOW Logger Viewer App](docs/espnow_logger_viewer_app.md) です。時計 (`cyd_clock_*`) はツリーに残していますが、この製品では登録しません。以下の説明は基盤 (esp32_project) のものを含みます。
+>
+> 現状、ESP-NOW は Wi-Fi STA 機能と共存できないため、**`APP_WIFI_STA=0` でビルドして使います**。Wi-Fi 有効のビルドでは ESP-NOW は起動せず、viewer は空の一覧で動きます。
+>
+> English supplement: derived product repo (ESP-NOW logger). Clock components stay but are not registered. Build with `APP_WIFI_STA=0`.
 
 ESP32-2432S028R 系の CYD (Cheap Yellow Display) 向け ESP-IDF プロジェクトです。
 
@@ -490,6 +496,8 @@ source ~/.espressif/tools/activate_idf_v5.5.6.sh; python "$IDF_PATH/tools/idf.py
 - [Error Log Store](docs/error_log_store.md)
 - [Boot ID](docs/boot_id.md)
 - [ESP-NOW Logger](docs/espnow_logger.md)
+- [ESP-NOW Logger Viewer App](docs/espnow_logger_viewer_app.md)
+- [ESP-NOW Logger Composition](docs/espnow_logger_composition.md)
 - [Sensor Log Format](docs/sensor_log_format.md)
 - [CYD Clock App](docs/cyd_clock_app.md)
 - [CYD Clock Alarm](docs/cyd_clock_alarm.md)
