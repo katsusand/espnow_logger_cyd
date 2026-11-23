@@ -15,6 +15,7 @@ main
        -> sd_card_status_start         (optional; its own task mounts the card)
        -> error_log_store_notify_time_decided(UNAVAILABLE)
        -> seed clock from build time   (only if the clock is before 2024-01-01)
+       -> time_sync_start()            (applies the time zone to TZ)
        -> app_shell idle return = 0    (disabled)
        -> espnow_logger_start          (optional; degraded mode on failure)
        -> system_settings_fix(IDLE_RETURN, HIDDEN)

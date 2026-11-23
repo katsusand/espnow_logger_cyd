@@ -8,4 +8,5 @@ idf_component_register(SRCS "espnow_logger_composition.c"
                              espnow_logger_viewer_app
                              nvs_health
                              sd_card_status
-                             system_boot)
+                             system_boot
+                             time_sync)

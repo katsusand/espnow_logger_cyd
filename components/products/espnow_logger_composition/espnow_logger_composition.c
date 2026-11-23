@@ -15,6 +15,7 @@
 #include "settings_pin.h"
 #include "system_settings_fix.h"
 #include "system_boot.h"
+#include "time_sync.h"
 
 #define TAG "espnow_logger_composition"
 
@@ -88,6 +89,12 @@ esp_err_t espnow_logger_composition_start(void)
      */
     error_log_store_notify_time_decided(ERROR_LOG_TIME_UNAVAILABLE);
     espnow_logger_composition_seed_time_from_build();
+    /*
+     * Applies the time zone to TZ. Without Wi-Fi this is the stub, which does no
+     * sync; it only sets TZ (default JST-9). Skipping it leaves TZ unset, so
+     * received UTC time is shown as UTC until the zone is changed in settings.
+     */
+    espnow_logger_composition_start_optional("time zone apply failed", time_sync_start());
 
     /*
      * The viewer is a logger: it must not drop back to a home screen, and the
