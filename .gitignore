@@ -86,3 +86,8 @@ Desktop.ini
 
 # UI font sources (fetched by scripts/ui_fonts/fetch_fonts.sh)
 third_party/fonts/**/*.ttf
+
+# Sensor log exports / plots (contain GPS positions; never commit)
+*.csv
+*_gps_track.html
+*_imu_dashboard.html

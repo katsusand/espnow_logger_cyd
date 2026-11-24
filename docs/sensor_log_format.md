@@ -420,3 +420,24 @@ python3 scripts/export_sensor_bin_csv.py /path/to/sensor_0001.bin
 - GPS 側には `lat_deg` などの派生列も含めます
 
 English supplement: This is an offline convenience tool. The binary file remains the source of truth, and the CSV split is derived data for analysis.
+
+### Plot (GPS map / IMU dashboard)
+
+`scripts/plot_sensor_csv.py` は、上の CSV から HTML を 2 つ作ります。標準ライブラリのみで動き、追加の pip 依存はありません。
+
+```bash
+python3 scripts/plot_sensor_csv.py sensor_0001_gps.csv sensor_0001_imu.csv --out /path/to/outdir
+```
+
+- GPS の CSV だけ、IMU の CSV だけでも動きます(ファイル名の `_gps.csv` / `_imu.csv` で判別)
+- `<name>_gps_track.html`: Leaflet + OpenStreetMap の地図。軌跡、各点(ツールチップに時刻・速度・高度・sats・hdop)、START / GOAL
+- `<name>_imu_dashboard.html`: Plotly の 5 段グラフ。加速度 3 軸 [g]、加速度の大きさ、角速度 3 軸 [deg/s]、角速度の大きさ、温度 [℃] と GPS 速度 [km/h](右軸)。横軸は IMU ログ開始からの秒(IMU が無ければ最初の GPS 点から)
+- 単位変換は mg→g、mdps→deg/s、cdeg→℃、`lat_e7`/`lon_e7`→度、mm/s→km/h
+- GPS で軌跡から除く行: `fix_type == 0`、緯度経度が (0, 0)、範囲外(±90 / ±180)、数値に変換できない行。除いた数は標準出力に出ます。`fix_type` は 0 以外なら残します(実ログには 1 と 6 があり、上の `0/1/2` の定義とは一致しないため)
+- IMU は数値に変換できない行だけ除きます。`sensor_imu_batch.csv` は対象外です
+- HTML は CDN(Leaflet / Plotly / OSM タイル)を読み込むため、開くにはネットワークが必要です
+- 注意: 地図 HTML には実際の位置情報が入ります。`.gitignore` で `*.csv` と出力 HTML を除外していますが、出力先はリポジトリの外にし、公開しないでください
+
+テスト: `python3 -m unittest discover -s test/py`
+
+English supplement: The generated HTML embeds raw GPS positions and loads Leaflet/Plotly from a CDN; keep outputs out of the repository.
