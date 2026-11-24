@@ -247,9 +247,10 @@ void espnow_logger_viewer_view_build(cyd_display_screen_t *screen, const espnow_
         }
     }
 
-    /* The request goes to the device that sends time packets, so it takes a tap only while there is one. */
-    const bool imu = m->running && m->imu_device_present;
-    const bool stop = imu && m->imu_streaming;
+    /* The request goes to the device that sends time packets, so it takes a tap only while there is one and no
+     * earlier request is waiting for its answer. */
+    const bool imu = m->running && m->imu_device_present && !m->imu_pending;
+    const bool stop = m->running && m->imu_device_present && m->imu_streaming;
     view_button(screen, "設定", 1, VIEW_BUTTON_ROW, 12, VIEW_BUTTON_ROWS, ESPNOW_LOGGER_VIEWER_ACTION_SETTINGS, true,
                 false);
     view_button(screen, stop ? "IMU 停止" : "IMU 開始", 27, VIEW_BUTTON_ROW, 12, VIEW_BUTTON_ROWS,

@@ -127,6 +127,13 @@ static void test_viewer_actions(void)
     w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE);
     ui_test_check(w != NULL && w->enabled && strcmp(widget_text(w), "IMU 停止") == 0,
                   "IMU toggle reads stop while the time sender streams");
+    /* A request is out: greyed out, the label still follows the observed state. */
+    m.imu_pending = true;
+    espnow_logger_viewer_view_build(&s_screen, &m);
+    w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE);
+    ui_test_check(w != NULL && !w->enabled && strcmp(widget_text(w), "IMU 停止") == 0,
+                  "IMU toggle is greyed out while a request waits for its answer");
+    m.imu_pending = false;
     m.running = false;
     espnow_logger_viewer_view_build(&s_screen, &m);
     w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE);

@@ -62,6 +62,8 @@ typedef struct {
      */
     bool imu_device_present;
     bool imu_streaming;
+    /* A start / stop request is out and the device has not shown the change yet: greyed out until it does. */
+    bool imu_pending;
     /* Distinct senders in the last 3 minutes, and every frame kept. */
     unsigned unique_senders;
     unsigned event_total;

@@ -2,6 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "app_registry.h"
 #include "app_shell.h"
 #include "cyd_display.h"
@@ -20,6 +21,9 @@
 /* A light poll inside app_shell's step, not a worker: it only checks the touch and the event sequence. */
 #define ESPNOW_VIEWER_POLL_MS 100
 #define ESPNOW_VIEWER_UNIQUE_WINDOW_MS (3ULL * 60ULL * 1000ULL)
+/* How long the IMU toggle waits for the device to show the requested change. A stop is seen only after the frames
+ * have been quiet for ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS, so this is longer than that; a lost request ends here. */
+#define ESPNOW_VIEWER_IMU_PENDING_MS 5000
 
 static const cyd_ui_screen_owner_t s_screen_owner = { .name = "espnow_viewer" };
 
@@ -37,6 +41,10 @@ static bool s_render_needed;
 /* What the IMU toggle showed last. The sender going quiet raises no event, so the step compares each poll. */
 static bool s_last_imu_present;
 static bool s_last_imu_streaming;
+/* A request is out: the toggle stays greyed until the device streams as asked, goes quiet, or the time is up. */
+static bool s_imu_pending;
+static bool s_imu_pending_target;
+static int64_t s_imu_pending_deadline_us;
 static bool s_pending_list_tap;
 static espnow_logger_event_t s_events[CONFIG_ESPNOW_LOGGER_EVENT_HISTORY_SIZE];
 static size_t s_event_count;
@@ -102,6 +110,7 @@ static void viewer_fill_model(void)
 
         m->imu_device_present = espnow_logger_get_time_source(&source);
         m->imu_streaming = m->imu_device_present && source.imu_streaming;
+        m->imu_pending = s_imu_pending;
     }
     m->unique_senders = viewer_count_unique_senders();
     m->event_total = (unsigned)espnow_logger_get_event_count();
@@ -240,11 +249,19 @@ static esp_err_t viewer_handle_action(uint16_t action_id)
             s_render_needed = true;
             return ESP_OK;
         }
+        if (s_imu_pending) {
+            return ESP_OK;
+        }
         err = espnow_logger_send_imu_stream_request_to_mac(source.mac, !source.imu_streaming);
         if (err != ESP_OK) {
-            /* A failed send is a state of the radio, not a fault of this app. */
+            /* A failed send is a state of the radio, not a fault of this app; nothing to wait for. */
             ESP_LOGW(TAG, "imu request failed: %s", esp_err_to_name(err));
+            return ESP_OK;
         }
+        s_imu_pending = true;
+        s_imu_pending_target = !source.imu_streaming;
+        s_imu_pending_deadline_us = esp_timer_get_time() + (int64_t)ESPNOW_VIEWER_IMU_PENDING_MS * 1000;
+        s_render_needed = true;
         return ESP_OK;
     }
     default:
@@ -269,6 +286,7 @@ static esp_err_t viewer_enter(void *ctx, const app_shell_app_t *from_app)
         s_last_imu_present = espnow_logger_get_time_source(&source);
         s_last_imu_streaming = s_last_imu_present && source.imu_streaming;
     }
+    s_imu_pending = false;
     s_render_needed = false;
     return viewer_render();
 }
@@ -311,6 +329,12 @@ static esp_err_t viewer_step(void *ctx)
         const bool present = espnow_logger_get_time_source(&source);
         const bool streaming = present && source.imu_streaming;
 
+        /* The request is answered when the device shows the asked state; it is moot when the device is gone. */
+        if (s_imu_pending && (!present || streaming == s_imu_pending_target ||
+                              esp_timer_get_time() >= s_imu_pending_deadline_us)) {
+            s_imu_pending = false;
+            s_render_needed = true;
+        }
         if (present != s_last_imu_present || streaming != s_last_imu_streaming) {
             s_last_imu_present = present;
             s_last_imu_streaming = streaming;
