@@ -4,6 +4,14 @@ cmake_minimum_required(VERSION 3.22)
 
 string(TIMESTAMP APP_BUILD_UNIX_TIME "%s" UTC)
 
+# ESP-NOW does not start in Wi-Fi-enabled builds (coexistence is not done), so
+# this product defaults to Wi-Fi STA OFF. Set APP_WIFI_STA=1 to build it in.
+# Components read ENV{APP_WIFI_STA} too, so the default is set in the
+# environment for the whole configure run.
+if(NOT DEFINED ENV{APP_WIFI_STA})
+    set(ENV{APP_WIFI_STA} 0)
+endif()
+
 set(APP_WIFI_STA_REQUESTED ON)
 if(DEFINED ENV{APP_WIFI_STA})
     string(TOLOWER "$ENV{APP_WIFI_STA}" APP_WIFI_STA_ENV)

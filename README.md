@@ -2,9 +2,9 @@
 
 > **このリポジトリについて**: これは [esp32_project](https://github.com/katsusand/esp32_project)(`upstream`)の派生で、製品は **ESP-NOW logger** です。ESP-NOW のフレームを受信して一覧表示し、SD カードへ記録します。起動は `components/products/espnow_logger_composition/` ([ESP-NOW Logger Composition](docs/espnow_logger_composition.md))、表示は [ESP-NOW Logger Viewer App](docs/espnow_logger_viewer_app.md) です。時計 (`cyd_clock_*`) はツリーに残していますが、この製品では登録しません。以下の説明は基盤 (esp32_project) のものを含みます。
 >
-> 現状、ESP-NOW は Wi-Fi STA 機能と共存できないため、**`APP_WIFI_STA=0` でビルドして使います**。Wi-Fi 有効のビルドでは ESP-NOW は起動せず、viewer は空の一覧で動きます。
+> 現状、ESP-NOW は Wi-Fi STA 機能と共存できないため、**このリポジトリは `APP_WIFI_STA` 未指定なら Wi-Fi 無効 (`0`) でビルドします**。`APP_WIFI_STA=1` を明示した Wi-Fi 有効のビルドでは ESP-NOW は起動せず、viewer は空の一覧で動きます。
 >
-> English supplement: derived product repo (ESP-NOW logger). Clock components stay but are not registered. Build with `APP_WIFI_STA=0`.
+> English supplement: derived product repo (ESP-NOW logger). Clock components stay but are not registered. Wi-Fi STA is OFF unless `APP_WIFI_STA=1` is set (the top-level CMakeLists defaults it to 0). After changing it, run `idf.py reconfigure`.
 
 ESP32-2432S028R 系の CYD (Cheap Yellow Display) 向け ESP-IDF プロジェクトです。
 
@@ -401,12 +401,12 @@ APP_WIFI_STA=0 python "$IDF_PATH/tools/idf.py" reconfigure
 APP_WIFI_STA=0 DEV=1 ninja -C build
 ```
 
-通常の Wi-Fi 有効ビルドへ戻す場合は、`APP_WIFI_STA` を未指定にして再構成します。
+Wi-Fi 有効ビルドにする場合は、`APP_WIFI_STA=1` を指定して再構成します (このリポジトリでは未指定が `0` 扱いです。ESP-NOW は起動しません)。
 
 ```bash
 source ~/.espressif/tools/activate_idf_v5.5.6.sh || true
-python "$IDF_PATH/tools/idf.py" reconfigure
-DEV=1 ninja -C build
+APP_WIFI_STA=1 python "$IDF_PATH/tools/idf.py" reconfigure
+APP_WIFI_STA=1 DEV=1 ninja -C build
 ```
 
 `APP_WIFI_STA=0` では `esp32_wifi_sta`、`wifi_profile_store`、`wifi_connection`、`radio_manager`、`time_sync`、`cyd_wifi_setup` が stub 実装へ切り替わります。アプリ側の API 呼び出しは残せますが、Wi-Fi 接続・NTP 同期・Wi-Fi setup は実行されません。

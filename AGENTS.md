@@ -5,7 +5,7 @@ This file is for AI assistants; it is kept terse on purpose. Human docs: README.
 ## Repo
 - Derived from esp32_project (remote `upstream`); product = ESP-NOW logger (`components/products/espnow_logger_composition`). Clock components stay in tree, unregistered.
 - Fix framework/platform/shared services in esp32_project first, then merge `upstream/main` here. Do not patch them only here.
-- ESP-NOW does not start in Wi-Fi-enabled builds (`espnow_logger_start()` returns `ESP_ERR_NOT_SUPPORTED`); the product is built with `APP_WIFI_STA=0` until coexistence is done.
+- ESP-NOW does not start in Wi-Fi-enabled builds (`espnow_logger_start()` returns `ESP_ERR_NOT_SUPPORTED`); the top-level CMakeLists defaults `APP_WIFI_STA` to 0 here (set `APP_WIFI_STA=1` for Wi-Fi) until coexistence is done. Existing `build/` needs `reconfigure` after pulling this.
 
 ## Source
 - Design intent lives in `main/` and `components/` (then `docs/`, `README.md`). `build*/` is generated: read it only for build/link issues, never edit it.
@@ -16,7 +16,7 @@ This file is for AI assistants; it is kept terse on purpose. Human docs: README.
 - `idf.py` is not on PATH. Prefer the wrappers, which load the pinned IDF and default `DEV=1`: `./scripts/idf-build.sh`, `./scripts/idf-menuconfig.sh`, `./scripts/idf-flash-monitor.sh PORT`, or `./scripts/idf-env.sh <idf.py args>`.
 - Direct use: `source ~/.espressif/tools/activate_idf_v5.5.6.sh || true` (the script can exit non-zero after setting up; never chain it with `&&` under `set -e`), then `python "$IDF_PATH/tools/idf.py" ...`.
 - Use `DEV=1` for normal builds. `DEV` is read at CMake configure time; to change it, `idf.py reconfigure` with the new value (a `DEV=` on `ninja` alone has no effect).
-- Wi-Fi off build: `APP_WIFI_STA=0` at configure time (see docs/build_feature_switches.md).
+- Wi-Fi off is the default here; Wi-Fi on: `APP_WIFI_STA=1` at configure time (see docs/build_feature_switches.md).
 - If an existing `build/` was configured by another IDF/Python and idf.py refuses it, build into a separate dir (`-B <dir> -D SDKCONFIG=<dir>/sdkconfig`). If `fullclean` refuses to delete `build/`, ask the user to delete it; never delete it yourself.
 - `PermissionError: [Errno 1]` from psutil in idf_component_manager means the sandbox blocked process listing, not a source error: rerun with permissions.
 
