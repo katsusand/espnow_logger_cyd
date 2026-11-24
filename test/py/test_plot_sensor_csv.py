@@ -63,6 +63,42 @@ class PlotTest(unittest.TestCase):
         self.assertEqual(len(P.run(g, None, self.tmp / "o2")), 1)
         self.assertEqual(len(P.run(None, i, self.tmp / "o3")), 1)
 
+    def test_imu_batch(self):
+        import json
+        cols = ["record_ts_ms", "temp_cdeg", "raw_samples_json"]
+        smp = lambda i: {"offset_ms": i * 10, "ax_mg": 100 * i, "ay_mg": 0, "az_mg": 1000,
+                         "gx_centi_dps": 250, "gy_centi_dps": 0, "gz_centi_dps": -100}
+        p = self.tmp / "b_imu_batch.csv"
+        write_csv(p, cols, [[1000, 3700, json.dumps([smp(i) for i in range(4)])],
+                            [1100, 3700, "not json"]])
+        d = P.load_imu_batch(p, step=1)
+        self.assertEqual((d.total_rows, d.skipped_rows, len(d.t_ms)), (2, 1, 4))
+        self.assertEqual((d.t_ms[1], d.ax_g[1], d.gx_dps[0], d.temp_c[0]), (1010, 0.1, 2.5, 37.0))
+        d2 = P.load_imu_batch(p, step=2)
+        self.assertEqual(len(d2.t_ms), 2)
+        self.assertAlmostEqual(d2.ax_g[0], 0.05)
+        files = P.run(None, None, self.tmp / "ob", imu_batch_path=p, step=1)
+        self.assertEqual([f.name for f in files], ["b_imu_dashboard.html"])
+
+    def test_detect_turns(self):
+        # 100 ms samples: stationary 5 s, then 20 km/h straight, 90 deg right turn (gz=-30 dps for 3 s), straight
+        gt, gv, it = [], [], []
+        for k in range(0, 200):
+            gt.append(k * 1000)
+            gv.append(0 if k < 5 else 20 / 3.6 * 1000)
+        g = P.GpsData(gt, [35.0] * 200, [137.0] * 200, [0] * 200, [(v / 1000 * 3.6) for v in gv], [1] * 200, [8] * 200, [1] * 200)
+        imu = P.ImuData([], [], [], [], [], [], [], [])
+        for i in range(2000):
+            tm = i * 100
+            imu.t_ms.append(tm)
+            imu.ax_g.append(0); imu.ay_g.append(0); imu.az_g.append(1.0)
+            imu.gx_dps.append(0); imu.gy_dps.append(0)
+            imu.gz_dps.append(-30.0 if 10000 <= tm < 13000 else 0.0)
+            imu.temp_c.append(25)
+        turns = P.detect_turns(imu, g)
+        self.assertEqual(len(turns), 1)
+        self.assertAlmostEqual(turns[0]["deg"], 90.0, delta=3)
+
     def test_empty_inputs_write_nothing(self):
         i = self.tmp / "e_imu.csv"
         write_csv(i, IMU_COLS, [])

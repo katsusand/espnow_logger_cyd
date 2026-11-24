@@ -75,7 +75,7 @@ python3 scripts/plot_sensor_csv.py --out out out/*_gps.csv out/*_imu.csv
 ## Documentation
 
 - [ESP-NOW Logger](docs/espnow_logger.md) / [Viewer App](docs/espnow_logger_viewer_app.md) / [Composition](docs/espnow_logger_composition.md)
-- [Sensor Log Format](docs/sensor_log_format.md)
+- [Sensor Log Format](docs/sensor_log_format.md) / [Motorcycle Use Notes](docs/motorcycle_use_notes.md)
 - [SD Card Status](docs/sd_card_status.md) / [SD Card Writer](docs/sd_card_writer.md)
 - [Build Feature Switches](docs/build_feature_switches.md)
 - 土台の各コンポーネントは `docs/` を参照

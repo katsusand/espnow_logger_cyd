@@ -432,9 +432,11 @@ python3 scripts/plot_sensor_csv.py sensor_0001_gps.csv sensor_0001_imu.csv --out
 - GPS の CSV だけ、IMU の CSV だけでも動きます(ファイル名の `_gps.csv` / `_imu.csv` で判別)
 - `<name>_gps_track.html`: Leaflet + OpenStreetMap の地図。軌跡、各点(ツールチップに時刻・速度・高度・sats・hdop)、START / GOAL
 - `<name>_imu_dashboard.html`: Plotly の 5 段グラフ。加速度 3 軸 [g]、加速度の大きさ、角速度 3 軸 [deg/s]、角速度の大きさ、温度 [℃] と GPS 速度 [km/h](右軸)。横軸は IMU ログ開始からの秒(IMU が無ければ最初の GPS 点から)
+- GPS と IMU を一緒に渡すと、地図に曲がり区間のマーカーを出します(橙=右折、紫=左折、ツールチップに角度・時刻・速度)。ジャイロの垂直軸成分を積分して 40° 以上の曲がりを拾う簡易判定で、水平に固定した車載(ダッシュボード等)を想定しています。零点と重力方向は GPS 速度がほぼ 0 の区間から求めます。バイクのようにロールする場合はそのままでは使えません。しきい値は `scripts/plot_sensor_csv.py` の `TURN_*` 定数です
 - 単位変換は mg→g、mdps→deg/s、cdeg→℃、`lat_e7`/`lon_e7`→度、mm/s→km/h
 - GPS で軌跡から除く行: `fix_type == 0`、緯度経度が (0, 0)、範囲外(±90 / ±180)、数値に変換できない行。除いた数は標準出力に出ます。`fix_type` は 0 以外なら残します(実ログには 1 と 6 があり、上の `0/1/2` の定義とは一致しないため)
-- IMU は数値に変換できない行だけ除きます。`sensor_imu_batch.csv` は対象外です
+- IMU は数値に変換できない行だけ除きます
+- `_imu_batch.csv`(実機ログの IMU はこちらに入ります)も IMU 入力として渡せます(`_imu.csv` とは同時に指定できません)。`raw_samples_json` を展開し、時刻は `record_ts_ms + offset_ms`、角速度は centi_dps→deg/s、温度はバッチ値です。サンプルが多い(約 100 万点)ので `--step N`(既定 10)で N サンプルずつ平均して間引きます。`--step 1` で間引きなしですが HTML が非常に大きくなります。間引くと短いピークは鈍ります
 - HTML は CDN(Leaflet / Plotly / OSM タイル)を読み込むため、開くにはネットワークが必要です
 - 注意: 地図 HTML には実際の位置情報が入ります。`.gitignore` で `*.csv` と出力 HTML を除外していますが、出力先はリポジトリの外にし、公開しないでください
 

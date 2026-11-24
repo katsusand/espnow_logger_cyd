@@ -91,3 +91,4 @@ third_party/fonts/**/*.ttf
 *.csv
 *_gps_track.html
 *_imu_dashboard.html
+sd_data/
