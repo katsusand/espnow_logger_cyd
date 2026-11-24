@@ -22,8 +22,8 @@ extern "C" {
 #define ESPNOW_LOGGER_VIEWER_ACTION_CHANNEL_DOWN 0x5001
 #define ESPNOW_LOGGER_VIEWER_ACTION_CHANNEL_UP 0x5002
 #define ESPNOW_LOGGER_VIEWER_ACTION_SETTINGS 0x5003
-#define ESPNOW_LOGGER_VIEWER_ACTION_IMU_START 0x5004
-#define ESPNOW_LOGGER_VIEWER_ACTION_IMU_STOP 0x5005
+/* One toggle: "IMU 開始" while the time sender is not streaming, "IMU 停止" while it is. */
+#define ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE 0x5004
 #define ESPNOW_LOGGER_VIEWER_ACTION_LOG_TOGGLE 0x5006
 
 #define ESPNOW_LOGGER_VIEWER_VIEW_EVENTS 4
@@ -55,6 +55,13 @@ typedef struct {
 
 typedef struct {
     bool running;
+    /*
+     * The IMU toggle, from the device that sent a time packet lately (espnow_logger_get_time_source()).
+     * No such device: the toggle is greyed out and reads "IMU 開始". Otherwise it reads "IMU 停止" while that
+     * device streams IMU frames, "IMU 開始" while it does not.
+     */
+    bool imu_device_present;
+    bool imu_streaming;
     /* Distinct senders in the last 3 minutes, and every frame kept. */
     unsigned unique_senders;
     unsigned event_total;

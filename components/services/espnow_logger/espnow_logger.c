@@ -55,6 +55,11 @@ typedef struct {
     uint8_t peer_mac[ESPNOW_LOGGER_MAC_ADDR_LEN];
     uint64_t utc_anchor_gps_ms;
     uint64_t utc_anchor_ts_ms;
+    /* The last UTC time packet's sender, and when the same sender last sent IMU frames (0 = never). */
+    bool time_source_valid;
+    uint8_t time_source_mac[ESPNOW_LOGGER_MAC_ADDR_LEN];
+    uint64_t time_source_ts_ms;
+    uint64_t time_source_imu_ts_ms;
     TaskHandle_t periodic_task;
     uint32_t event_sequence;
     size_t event_count;
@@ -652,6 +657,45 @@ static uint8_t get_runtime_channel(void)
     return primary;
 }
 
+/* ---------------------------------------------------------------- who sends the time */
+
+/* Wi-Fi task. A time packet makes its sender the time source; IMU frames from that sender mark it streaming. */
+static void note_time_source(espnow_sensor_kind_t kind, const uint8_t *src_mac, uint64_t ts_ms)
+{
+    portENTER_CRITICAL(&s_logger.lock);
+    if (kind == ESPNOW_SENSOR_KIND_UTC_TIME) {
+        if (!s_logger.time_source_valid || memcmp(s_logger.time_source_mac, src_mac, ESPNOW_LOGGER_MAC_ADDR_LEN) != 0) {
+            memcpy(s_logger.time_source_mac, src_mac, ESPNOW_LOGGER_MAC_ADDR_LEN);
+            s_logger.time_source_imu_ts_ms = 0;
+        }
+        s_logger.time_source_valid = true;
+        s_logger.time_source_ts_ms = ts_ms;
+    } else if (s_logger.time_source_valid &&
+               memcmp(s_logger.time_source_mac, src_mac, ESPNOW_LOGGER_MAC_ADDR_LEN) == 0) {
+        s_logger.time_source_imu_ts_ms = ts_ms;
+    }
+    portEXIT_CRITICAL(&s_logger.lock);
+}
+
+bool espnow_logger_get_time_source(espnow_logger_time_source_t *out)
+{
+    const uint64_t now = timestamp_ms();
+    bool present;
+
+    if (out == NULL) {
+        return false;
+    }
+    portENTER_CRITICAL(&s_logger.lock);
+    present = s_logger.time_source_valid && now - s_logger.time_source_ts_ms <= ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS;
+    if (present) {
+        memcpy(out->mac, s_logger.time_source_mac, ESPNOW_LOGGER_MAC_ADDR_LEN);
+        out->imu_streaming = s_logger.time_source_imu_ts_ms != 0 &&
+                             now - s_logger.time_source_imu_ts_ms <= ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS;
+    }
+    portEXIT_CRITICAL(&s_logger.lock);
+    return present;
+}
+
 /* ---------------------------------------------------------------- what arrives goes to the card */
 
 /*
@@ -669,6 +713,11 @@ static void log_rx_frame(uint64_t ts_ms, const uint8_t *src_mac, const uint8_t *
 
     if (packet.utc_epoch_ms != 0 && apply_utc_epoch_ms(packet.utc_epoch_ms, "sensor packet") != ESP_OK) {
         ESP_LOGW(TAG, "could not set the clock from a sensor packet");
+    }
+
+    if (src_mac != NULL && (packet.kind == ESPNOW_SENSOR_KIND_UTC_TIME || packet.kind == ESPNOW_SENSOR_KIND_IMU ||
+                            packet.kind == ESPNOW_SENSOR_KIND_IMU_BATCH)) {
+        note_time_source(packet.kind, src_mac, ts_ms);
     }
 
     switch (packet.kind) {

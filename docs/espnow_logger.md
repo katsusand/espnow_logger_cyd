@@ -71,7 +71,13 @@ English supplement: coexistence with STA Wi-Fi is not implemented yet; the guard
 | `espnow_logger_send_broadcast()` / `send_to_configured_peer()` / `send_to_mac()` | 送信 |
 | `espnow_logger_send_imu_stream_start_request()` / `stop_request()` / `request_to_mac()` | IMU stream の開始 / 停止要求（`type=5`） |
 
-IMU stream 要求は、peer があればその peer へ unicast、無ければ broadcast します。
+IMU stream 要求は、peer があればその peer へ unicast、無ければ broadcast します (`send_imu_stream_start_request()` / `stop_request()`)。viewer は代わりに、次の「時刻 packet の送信元」へ `request_to_mac()` で unicast します。
+
+| API | 内容 |
+| --- | --- |
+| `espnow_logger_get_time_source(out)` | 直近 (`ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS` = 30 秒、sender は 15 秒ごとに送る) に UTC time packet (`type=3`) を送ってきた機器の MAC と、その機器が IMU を送信中か (`imu_streaming`: 同じ MAC の IMU / IMU batch を `ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS` = 2 秒以内に受けた)。該当する機器が無ければ `false` |
+
+English supplement: the time source is the sender of the newest UTC time packet; a different sender replaces it and clears its streaming mark. Updated on the Wi-Fi task under the service lock; readable from any task.
 
 ### Event History
 

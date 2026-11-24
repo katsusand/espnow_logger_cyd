@@ -82,7 +82,13 @@ static void test_viewer_fits(void)
     m.channel = ESPNOW_LOGGER_VIEWER_VIEW_CHANNEL_MIN;
     espnow_logger_viewer_view_build(&s_screen, &m);
     ui_test_check_screen("viewer, stopped and empty", &s_screen);
-    ui_test_check(find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_START) != NULL, "IMU start is drawn");
+    ui_test_check(find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE) != NULL, "IMU toggle is drawn");
+}
+
+/* A label is referenced when its storage is immutable and copied otherwise. */
+static const char *widget_text(const cyd_display_widget_t *w)
+{
+    return w->text_ref != NULL ? w->text_ref : w->text;
 }
 
 static void test_viewer_actions(void)
@@ -102,15 +108,28 @@ static void test_viewer_actions(void)
     w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_CHANNEL_UP);
     ui_test_check(w != NULL && !w->enabled, "channel can not go above the highest");
 
-    w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_START);
-    ui_test_check(w != NULL && w->enabled, "IMU is on while the service runs");
-    m.has_peer_mac = false;
+    /* No device sends time packets: greyed out, still reads start. */
+    m.imu_device_present = false;
+    m.imu_streaming = false;
     espnow_logger_viewer_view_build(&s_screen, &m);
-    w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_STOP);
-    ui_test_check(w != NULL && w->enabled, "IMU still works without a peer (broadcast)");
+    w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE);
+    ui_test_check(w != NULL && !w->enabled && strcmp(widget_text(w), "IMU 開始") == 0,
+                  "IMU toggle is greyed out and reads start without a time sender");
+    /* A time sender that does not stream: start. */
+    m.imu_device_present = true;
+    espnow_logger_viewer_view_build(&s_screen, &m);
+    w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE);
+    ui_test_check(w != NULL && w->enabled && strcmp(widget_text(w), "IMU 開始") == 0,
+                  "IMU toggle reads start while the time sender is quiet");
+    /* ... and one that streams: stop. */
+    m.imu_streaming = true;
+    espnow_logger_viewer_view_build(&s_screen, &m);
+    w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE);
+    ui_test_check(w != NULL && w->enabled && strcmp(widget_text(w), "IMU 停止") == 0,
+                  "IMU toggle reads stop while the time sender streams");
     m.running = false;
     espnow_logger_viewer_view_build(&s_screen, &m);
-    w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_STOP);
+    w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE);
     ui_test_check(w != NULL && !w->enabled, "IMU is off while the service is stopped");
     w = find_action(ESPNOW_LOGGER_VIEWER_ACTION_SETTINGS);
     ui_test_check(w != NULL && w->enabled, "settings is always there");

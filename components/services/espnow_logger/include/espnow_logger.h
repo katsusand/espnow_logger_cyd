@@ -114,6 +114,23 @@ esp_err_t espnow_logger_send_imu_stream_start_request(void);
 esp_err_t espnow_logger_send_imu_stream_stop_request(void);
 esp_err_t espnow_logger_send_imu_stream_request_to_mac(const uint8_t dest_mac[6], bool start);
 
+/*
+ * The device that sent a UTC time packet lately: the one an IMU start / stop request is for.
+ * A time packet counts for ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS (the sender sends one every 15 s), and
+ * the device is "streaming" while IMU / IMU batch frames from the same MAC keep arriving
+ * (within ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS of now).
+ */
+#define ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS 30000U
+#define ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS 2000U
+
+typedef struct {
+    uint8_t mac[ESPNOW_LOGGER_MAC_ADDR_LEN];
+    bool imu_streaming;
+} espnow_logger_time_source_t;
+
+/* False (and `out` untouched) when no device sent a time packet within the window. Safe from any task. */
+bool espnow_logger_get_time_source(espnow_logger_time_source_t *out);
+
 uint32_t espnow_logger_get_event_sequence(void);
 size_t espnow_logger_get_event_count(void);
 /* Newest first. */

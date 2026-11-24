@@ -93,6 +93,12 @@ esp_err_t espnow_logger_send_imu_stream_request_to_mac(const uint8_t dest_mac[6]
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+bool espnow_logger_get_time_source(espnow_logger_time_source_t *out)
+{
+    (void)out;
+    return false;
+}
+
 uint32_t espnow_logger_get_event_sequence(void)
 {
     return 0;

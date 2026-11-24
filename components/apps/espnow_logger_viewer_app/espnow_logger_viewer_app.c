@@ -34,6 +34,9 @@ static uint32_t s_last_sequence;
 static uint32_t s_last_sd_revision;
 static size_t s_selected_index;
 static bool s_render_needed;
+/* What the IMU toggle showed last. The sender going quiet raises no event, so the step compares each poll. */
+static bool s_last_imu_present;
+static bool s_last_imu_streaming;
 static bool s_pending_list_tap;
 static espnow_logger_event_t s_events[CONFIG_ESPNOW_LOGGER_EVENT_HISTORY_SIZE];
 static size_t s_event_count;
@@ -94,6 +97,12 @@ static void viewer_fill_model(void)
 
     memset(m, 0, sizeof(*m));
     m->running = espnow_logger_is_started();
+    {
+        espnow_logger_time_source_t source;
+
+        m->imu_device_present = espnow_logger_get_time_source(&source);
+        m->imu_streaming = m->imu_device_present && source.imu_streaming;
+    }
     m->unique_senders = viewer_count_unique_senders();
     m->event_total = (unsigned)espnow_logger_get_event_count();
     m->log_requested = viewer_log_requested();
@@ -223,15 +232,21 @@ static esp_err_t viewer_handle_action(uint16_t action_id)
         s_render_needed = true;
         return ESP_OK;
     }
-    case ESPNOW_LOGGER_VIEWER_ACTION_IMU_START:
-    case ESPNOW_LOGGER_VIEWER_ACTION_IMU_STOP:
-        err = action_id == ESPNOW_LOGGER_VIEWER_ACTION_IMU_START ? espnow_logger_send_imu_stream_start_request()
-                                                                 : espnow_logger_send_imu_stream_stop_request();
+    case ESPNOW_LOGGER_VIEWER_ACTION_IMU_TOGGLE: {
+        espnow_logger_time_source_t source;
+
+        /* A greyed button is not hit-tested; this covers a sender that went quiet between the draw and the tap. */
+        if (!espnow_logger_get_time_source(&source)) {
+            s_render_needed = true;
+            return ESP_OK;
+        }
+        err = espnow_logger_send_imu_stream_request_to_mac(source.mac, !source.imu_streaming);
         if (err != ESP_OK) {
             /* A failed send is a state of the radio, not a fault of this app. */
             ESP_LOGW(TAG, "imu request failed: %s", esp_err_to_name(err));
         }
         return ESP_OK;
+    }
     default:
         return ESP_OK;
     }
@@ -248,6 +263,12 @@ static esp_err_t viewer_enter(void *ctx, const app_shell_app_t *from_app)
     s_last_sequence = espnow_logger_get_event_sequence();
     s_last_sd_revision = sd_card_status_get_revision();
     viewer_refresh_events();
+    {
+        espnow_logger_time_source_t source;
+
+        s_last_imu_present = espnow_logger_get_time_source(&source);
+        s_last_imu_streaming = s_last_imu_present && source.imu_streaming;
+    }
     s_render_needed = false;
     return viewer_render();
 }
@@ -284,6 +305,17 @@ static esp_err_t viewer_step(void *ctx)
     if (sd_revision != s_last_sd_revision) {
         s_last_sd_revision = sd_revision;
         s_render_needed = true;
+    }
+    {
+        espnow_logger_time_source_t source;
+        const bool present = espnow_logger_get_time_source(&source);
+        const bool streaming = present && source.imu_streaming;
+
+        if (present != s_last_imu_present || streaming != s_last_imu_streaming) {
+            s_last_imu_present = present;
+            s_last_imu_streaming = streaming;
+            s_render_needed = true;
+        }
     }
     if (s_render_needed) {
         s_render_needed = false;
