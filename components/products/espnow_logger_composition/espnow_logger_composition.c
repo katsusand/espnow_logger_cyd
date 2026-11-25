@@ -135,6 +135,16 @@ esp_err_t espnow_logger_composition_start(void)
         initial_app = system_settings_app_get_app();
     }
 
+    /*
+     * Holding BOOT opens touch calibration from any screen: the way out when a
+     * bad calibration leaves no button reachable by touch. ESP_ERR_NOT_SUPPORTED
+     * (no touch panel) needs nothing.
+     */
+    esp_err_t hold_err = system_touch_calibration_install_boot_hold(SYSTEM_TOUCH_CALIBRATION_BOOT_HOLD_SECONDS);
+    if (hold_err != ESP_OK && hold_err != ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGW(TAG, "BOOT hold handler not set: %s", esp_err_to_name(hold_err));
+    }
+
     /* Registration lives here, not in an app's enter(): see cyd_clock_composition. */
     espnow_logger_composition_start_optional("register viewer app failed", espnow_logger_viewer_app_register());
     return app_shell_start(initial_app);

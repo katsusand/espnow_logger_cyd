@@ -22,6 +22,7 @@ main
        -> settings_pin_init            (optional)
        -> NVS health check             (invalid NVS: open Initialize NVS confirm)
        -> boot touch shortcut          (opens settings)
+       -> BOOT hold (5 s) -> touch calibration  (system_touch_calibration_install_boot_hold)
        -> espnow_logger_viewer_app_register  (viewer + log settings)
        -> app_shell_start(viewer)
 ```
@@ -53,6 +54,8 @@ English contract: only `system_boot_start()` and `app_shell_start()` are fatal.
 ## Boot Shortcut
 
 画面を押したまま電源を入れると settings が初期 app になります (タッチ補正は settings から)。旧アプリの「押したまま起動でタッチ補正」に相当します。NVS が不正なら Initialize NVS の確認が優先されます。
+
+BOOT ボタンを `SYSTEM_TOUCH_CALIBRATION_BOOT_HOLD_SECONDS` (5 秒) 長押しすると、どの画面からでもタッチ補正が開きます (`system_touch_calibration_install_boot_hold()`)。補正がずれてボタンに触れなくなったときの逃げ道です。補正を終える (または中止する) と、開く前の画面へ戻ります。タッチパネルの無いビルドでは `ESP_ERR_NOT_SUPPORTED` が返り、何もしません。
 
 ## Fixed Settings
 
