@@ -102,7 +102,7 @@ typedef struct __attribute__((packed)) {
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | IMU | `0xA55A` | `2` | `1` | `24` bytes | `sample_seq:uint32_le`, `ax/ay/az:int16_le`, `gx/gy/gz:int16_le`, `temp_cdeg:int16_le`, `flags:uint16_le` | IMU 1 sample ごと | `len == 24` を確認して IMU として保存 |
 | GPS | `0xA55A` | `2` | `2` | `40` bytes | `sample_seq:uint32_le`, `lat_e7:int32_le`, `lon_e7:int32_le`, `alt_mm:int32_le`, `speed_mmps:uint32_le`, `course_cdeg:uint16_le`, `hdop_centi:uint16_le`, `sats:uint8`, `fix_type:uint8`, `flags:uint16_le`, `gps_utc_ms:uint64_le` | 有効な GPS 状態が取れた更新時 | `len == 40` を確認して GPS として保存 |
-| UTC time | `0xA55A` | `2` | `3` | `11` bytes | `utc_year:uint16_le`, `utc_month:uint8`, `utc_day:uint8`, `utc_hour:uint8`, `utc_minute:uint8`, `utc_second:uint8` | `RMC` または `ZDA` で有効時刻を得て、`00 / 15 / 30 / 45` 秒だけ送信 | `len == 11` を確認して RTC 補正に使う |
+| UTC time | `0xA55A` | `2` | `3` | `11` bytes | `utc_year:uint16_le`, `utc_month:uint8`, `utc_day:uint8`, `utc_hour:uint8`, `utc_minute:uint8`, `utc_second:uint8` | `RMC` または `ZDA` で有効時刻を得たとき、1 分間に数回 (多くても毎秒 1 回) | `len == 11` を確認して RTC 補正に使う |
 | IMU batch | `0xA55A` | `2` | `4` | `178` bytes | `sequence_start:uint32_le`, `sample_count:uint8`, `sample_period_ms:uint8`, `flags:uint16_le`, `temperature_centi_c:int16_le`, `gps_utc_ms:uint64_le`, `summary:36 bytes`, `raw[10]:120 bytes` | sender の IMU stream 有効中 | `len == 178` を確認して `sensor.bin` へ batch record として lossless 保存 |
 | IMU batch (summary なし) | `0xA55A` | `2` | `7` | `142` bytes | `sequence_start:uint32_le`, `sample_count:uint8`, `sample_period_ms:uint8`, `flags:uint16_le`, `temperature_centi_c:int16_le`, `gps_utc_ms:uint64_le`, `raw[10]:120 bytes` | sender の IMU stream 有効中（type 4 は sender の `IMU_SEND_LEGACY_BATCH` が有効なときだけ併送） | `len == 142` と `sample_count` が 1..10 を確認して `sensor.bin` へ lossless 保存 |
 | Attitude | `0xA55A` | `2` | `6` | `30` bytes | `sequence:uint32_le`, `gps_utc_ms:uint64_le`, `roll_centi_deg:int16_le`, `pitch_centi_deg:int16_le`, `yaw_rate_centi_dps:int16_le`, `long_accel_mg:int16_le`, `lat_accel_mg:int16_le`, `speed_cmps:uint16_le`, `flags:uint16_le` | sender の IMU stream 有効中、100 ms ごと | `len == 30` を確認して `sensor.bin` へ lossless 保存 |
@@ -147,7 +147,7 @@ packet 形状:
 送信条件:
 
 - `RMC` または `ZDA` で有効時刻を得る
-- 秒が `00 / 15 / 30 / 45` のときだけ送信する
+- 1 分間に数回送る。多くても毎秒 1 回まで。何秒に送るかは送信側の都合で決まり、receiver は決まった秒を前提にしない
 
 補足:
 

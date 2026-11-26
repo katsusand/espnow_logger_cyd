@@ -116,7 +116,7 @@ esp_err_t espnow_logger_send_imu_stream_request_to_mac(const uint8_t dest_mac[6]
 
 /*
  * The device that sent a UTC time packet lately: the one an IMU start / stop request is for.
- * A time packet counts for ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS (the sender sends one every 15 s), and
+ * A time packet counts for ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS (the sender sends a few per minute, at most one per second), and
  * the device is "streaming" while IMU / IMU batch frames from the same MAC keep arriving
  * (within ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS of now).
  */
