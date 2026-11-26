@@ -127,6 +127,34 @@ void espnow_sensor_packet_parse(const uint8_t *payload, size_t len, espnow_senso
         out->utc_epoch_ms = out->body.imu_batch.gps_utc_ms;
         return;
 
+    case ESPNOW_SENSOR_TYPE_IMU_BATCH_NOSUMMARY:
+        expected = head + sizeof(out->body.imu_batch_nosummary);
+        if (len != expected) {
+            set_error(out, "imu batch (type 7) packet length mismatch len=%u expected=%u", (unsigned)len, (unsigned)expected);
+            return;
+        }
+        memcpy(&out->body.imu_batch_nosummary, body, sizeof(out->body.imu_batch_nosummary));
+        if (out->body.imu_batch_nosummary.sample_count == 0U ||
+            out->body.imu_batch_nosummary.sample_count > ESPNOW_SENSOR_IMU_BATCH_MAX_SAMPLES) {
+            set_error(out, "imu batch (type 7) sample_count invalid count=%u len=%u",
+                      out->body.imu_batch_nosummary.sample_count, (unsigned)len);
+            return;
+        }
+        out->kind = ESPNOW_SENSOR_KIND_IMU_BATCH_NOSUMMARY;
+        out->utc_epoch_ms = out->body.imu_batch_nosummary.gps_utc_ms;
+        return;
+
+    case ESPNOW_SENSOR_TYPE_ATTITUDE:
+        expected = head + sizeof(out->body.attitude);
+        if (len != expected) {
+            set_error(out, "attitude packet length mismatch len=%u expected=%u", (unsigned)len, (unsigned)expected);
+            return;
+        }
+        memcpy(&out->body.attitude, body, sizeof(out->body.attitude));
+        out->kind = ESPNOW_SENSOR_KIND_ATTITUDE;
+        out->utc_epoch_ms = out->body.attitude.gps_utc_ms;
+        return;
+
     case ESPNOW_SENSOR_TYPE_GPS:
         expected = head + sizeof(out->body.gps);
         if (len != expected) {
@@ -216,6 +244,16 @@ size_t espnow_sensor_record_encode(const espnow_sensor_packet_t *packet,
         type = ESPNOW_SENSOR_TYPE_IMU_BATCH;
         payload = &packet->body.imu_batch;
         payload_len = sizeof(packet->body.imu_batch);
+        break;
+    case ESPNOW_SENSOR_KIND_IMU_BATCH_NOSUMMARY:
+        type = ESPNOW_SENSOR_TYPE_IMU_BATCH_NOSUMMARY;
+        payload = &packet->body.imu_batch_nosummary;
+        payload_len = sizeof(packet->body.imu_batch_nosummary);
+        break;
+    case ESPNOW_SENSOR_KIND_ATTITUDE:
+        type = ESPNOW_SENSOR_TYPE_ATTITUDE;
+        payload = &packet->body.attitude;
+        payload_len = sizeof(packet->body.attitude);
         break;
     default:
         return 0;

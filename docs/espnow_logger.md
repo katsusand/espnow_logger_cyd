@@ -47,7 +47,7 @@ English supplement: coexistence with STA Wi-Fi is not implemented yet; the guard
 - 起動時送信と periodic 送信（Kconfig で有効にしたとき）
 - RX / TX frame のシリアルログと、履歴の保持
 - IMU stream 開始 / 停止要求の送信
-- sender が運んだ UTC で system clock を合わせる（GPS / IMU batch の `gps_utc_ms`、UTC time packet）
+- sender が運んだ UTC で system clock を合わせる（GPS / IMU batch / attitude の `gps_utc_ms`、UTC time packet）
 - SD ログの開始 / 停止と、カードの状態に合わせた stream の開閉
 
 担当しないもの: 通常の AP 接続、DHCP/IP、NTP、Wi-Fi setup UI、画面描画、カードの mount / format / unmount。
@@ -75,7 +75,7 @@ IMU stream 要求は、peer があればその peer へ unicast、無ければ b
 
 | API | 内容 |
 | --- | --- |
-| `espnow_logger_get_time_source(out)` | 直近 (`ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS` = 30 秒、sender は 15 秒ごとに送る) に UTC time packet (`type=3`) を送ってきた機器の MAC と、その機器が IMU を送信中か (`imu_streaming`: 同じ MAC の IMU / IMU batch を `ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS` = 2 秒以内に受けた)。該当する機器が無ければ `false` |
+| `espnow_logger_get_time_source(out)` | 直近 (`ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS` = 30 秒、sender は 1 分間に数回送る) に UTC time packet (`type=3`) を送ってきた機器の MAC と、その機器が IMU を送信中か (`imu_streaming`: 同じ MAC の IMU / IMU batch (type 4 / 7) / attitude を `ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS` = 2 秒以内に受けた)。該当する機器が無ければ `false` |
 
 English supplement: the time source is the sender of the newest UTC time packet; a different sender replaces it and clears its streaming mark. Updated on the Wi-Fi task under the service lock; readable from any task.
 
@@ -132,9 +132,9 @@ Wi-Fi task (RX callback)
 
 記録の対象:
 
-- 形式が正しいセンサー packet v2（`type=1` IMU、`type=2` GPS、`type=4` IMU batch）は `sensor.bin` へ
+- 形式が正しいセンサー packet v2（`type=1` IMU、`type=2` GPS、`type=4` / `type=7` IMU batch、`type=6` attitude）は `sensor.bin` へ
 - それ以外のすべての frame（TX も含む。button、UTC time、IMU control、decode 不能なもの）は `espnow.csv` へ
-- `gps_utc_ms != 0` の GPS / IMU batch と、UTC time packet は、system clock を合わせるのにも使う
+- `gps_utc_ms != 0` の GPS / IMU batch / attitude と、UTC time packet は、system clock を合わせるのにも使う
 
 English supplement: with logging on, one RX frame ends in exactly one place: a sensor record, or a CSV row. A frame that fails to decode is a CSV row plus an error log line.
 
@@ -173,9 +173,21 @@ namespace は `ftr_espnow`（`ftr_` は、アプリを入れ替えても残る�
 
 ## Logging Format
 
-シリアルログは 1 frame ごとに `status`、`ts_ms`、`ch`、`src`、`dst`、`rssi`、`len`、`payload`（hex）を出します。`ts_ms` は起動からの経過ミリ秒で、wall clock ではありません。TX 完了の callback は RSSI を持たないので、信号強度は受信側のログを見てください。
+センサー record になる frame（IMU / GPS / IMU batch / attitude）はシリアルに出しません。IMU 送信中は毎秒約 30 frame 届き、hex の行が 115200 baud のコンソールで送れる量を超えます。出力待ちで Wi-Fi task が止まり、画面操作まで重くなるためです。中身は `sensor.bin` に残ります。それ以外の frame（button、時刻、IMU control、decode error、TX）のシリアルログは 1 frame ごとに `status`、`ts_ms`、`ch`、`src`、`dst`、`rssi`、`len`、`payload`（hex）を出します。`ts_ms` は起動からの経過ミリ秒で、wall clock ではありません。TX 完了の callback は RSSI を持たないので、信号強度は受信側のログを見てください。
 
 `espnow.csv` の `utc_iso8601` は、system clock が合っていれば、その時刻を基にした UTC です。後で GPS UTC か UTC time packet が来ると、その値で合わせ直します。
+
+### Debug Payload Logging
+
+開発中に payload をシリアルへ出したくなったときは、先にデータ量を見積もります。
+
+- 115200 baud のコンソールで送れるのは毎秒約 11.5 KB。hex は 1 byte が 3 文字になる。例: 178 bytes の type 4 は 1 行約 650 文字で、10 Hz だけで毎秒約 6.5 KB
+- 合計が毎秒数 KB を超えるなら、frame ごとには出さない。RX callback は Wi-Fi task で動くので、出力待ちでそのまま受信と画面が止まる
+- どうしても中身を見たいときは間引く。例: kind ごとに N frame に 1 回だけ、または 1 秒ごとに件数と最後の 1 frame だけを出す。間引き方と間隔は、その行の近くにコメントで書く
+- 試し終えたら、その出力は消すか `ESP_LOGD` に下げる (既定の `CONFIG_LOG_MAXIMUM_LEVEL` は INFO なので、`ESP_LOGD` はビルドに入らない)
+- 全部の中身が必要なら、シリアルではなく `sensor.bin` / `espnow.csv` を見る
+
+English supplement: console output on the Wi-Fi task is a back-pressure path. Budget the bytes per second before adding a per-frame log, and rate-limit anything that scales with the IMU stream.
 
 ## Concurrency
 

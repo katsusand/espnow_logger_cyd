@@ -37,8 +37,8 @@ English supplement: This format intentionally separates high-rate sensor recordi
 
 補足:
 
-- `sensor.bin` には IMU / GPS / IMU batch だけを書く
-- `espnow.csv` には IMU / GPS / IMU batch packet を通常は書かない
+- `sensor.bin` には IMU / GPS / IMU batch（type 4 / type 7）/ attitude（type 6）だけを書く
+- `espnow.csv` には IMU / GPS / IMU batch / attitude packet を通常は書かない
 - 記録中だけ書く。記録していないときの frame は、画面の履歴（RAM）にだけ残る
 
 English supplement: the old per-session `error_NNNN.log` is gone on purpose. `error_log_store` already provides dated files, a boot id line, repeat folding and holding while the clock is unknown, so a second copy would only drift from it. Decode errors are written there with the packet's source MAC.
@@ -80,7 +80,7 @@ English supplement: the old `fflush` / `fsync` trigger bytes are gone; the write
 - record の単純連結
 - 各 record は `header + payload + crc32`
 - record 単位で自己完結
-- record type は v1 では `IMU` / `GPS` / `IMU batch` を使用する
+- record type は v1 では `IMU` / `GPS` / `IMU batch` / `IMU batch (summary なし)` / `attitude` を使用する
 
 将来別センサーを追加するときは、新しい `type` を追加します。
 
@@ -92,7 +92,7 @@ English supplement: the old `fflush` / `fsync` trigger bytes are gone; the write
 typedef struct __attribute__((packed)) {
     uint16_t magic;    // 0xA55A
     uint8_t version;   // 2
-    uint8_t type;      // 1=IMU, 2=GPS, 3=UTC time, 4=IMU batch
+    uint8_t type;      // 1=IMU, 2=GPS, 3=UTC time, 4=IMU batch, 6=attitude, 7=IMU batch (no summary)
 } espnow_sensor_packet_header_v1_t;
 ```
 
@@ -102,8 +102,10 @@ typedef struct __attribute__((packed)) {
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | IMU | `0xA55A` | `2` | `1` | `24` bytes | `sample_seq:uint32_le`, `ax/ay/az:int16_le`, `gx/gy/gz:int16_le`, `temp_cdeg:int16_le`, `flags:uint16_le` | IMU 1 sample ごと | `len == 24` を確認して IMU として保存 |
 | GPS | `0xA55A` | `2` | `2` | `40` bytes | `sample_seq:uint32_le`, `lat_e7:int32_le`, `lon_e7:int32_le`, `alt_mm:int32_le`, `speed_mmps:uint32_le`, `course_cdeg:uint16_le`, `hdop_centi:uint16_le`, `sats:uint8`, `fix_type:uint8`, `flags:uint16_le`, `gps_utc_ms:uint64_le` | 有効な GPS 状態が取れた更新時 | `len == 40` を確認して GPS として保存 |
-| UTC time | `0xA55A` | `2` | `3` | `11` bytes | `utc_year:uint16_le`, `utc_month:uint8`, `utc_day:uint8`, `utc_hour:uint8`, `utc_minute:uint8`, `utc_second:uint8` | `RMC` または `ZDA` で有効時刻を得て、`00 / 15 / 30 / 45` 秒だけ送信 | `len == 11` を確認して RTC 補正に使う |
+| UTC time | `0xA55A` | `2` | `3` | `11` bytes | `utc_year:uint16_le`, `utc_month:uint8`, `utc_day:uint8`, `utc_hour:uint8`, `utc_minute:uint8`, `utc_second:uint8` | `RMC` または `ZDA` で有効時刻を得たとき、1 分間に数回 (多くても毎秒 1 回) | `len == 11` を確認して RTC 補正に使う |
 | IMU batch | `0xA55A` | `2` | `4` | `178` bytes | `sequence_start:uint32_le`, `sample_count:uint8`, `sample_period_ms:uint8`, `flags:uint16_le`, `temperature_centi_c:int16_le`, `gps_utc_ms:uint64_le`, `summary:36 bytes`, `raw[10]:120 bytes` | sender の IMU stream 有効中 | `len == 178` を確認して `sensor.bin` へ batch record として lossless 保存 |
+| IMU batch (summary なし) | `0xA55A` | `2` | `7` | `142` bytes | `sequence_start:uint32_le`, `sample_count:uint8`, `sample_period_ms:uint8`, `flags:uint16_le`, `temperature_centi_c:int16_le`, `gps_utc_ms:uint64_le`, `raw[10]:120 bytes` | sender の IMU stream 有効中（type 4 は sender の `IMU_SEND_LEGACY_BATCH` が有効なときだけ併送） | `len == 142` と `sample_count` が 1..10 を確認して `sensor.bin` へ lossless 保存 |
+| Attitude | `0xA55A` | `2` | `6` | `30` bytes | `sequence:uint32_le`, `gps_utc_ms:uint64_le`, `roll_centi_deg:int16_le`, `pitch_centi_deg:int16_le`, `yaw_rate_centi_dps:int16_le`, `long_accel_mg:int16_le`, `lat_accel_mg:int16_le`, `speed_cmps:uint16_le`, `flags:uint16_le` | sender の IMU stream 有効中、100 ms ごと | `len == 30` を確認して `sensor.bin` へ lossless 保存 |
 packet 形状:
 
 - IMU packet: `packet_header + sensor_imu_payload_v1_t`
@@ -118,7 +120,7 @@ packet 形状:
 - `magic` 一致だが version / type / length が不正な packet は decode error として、共通のエラーログ（`ERR_*.LOG`）と `espnow.csv` に残す。記録中だけ書く
 - button などの non-sensor packet は `espnow.csv` 側へ残す
 - `type = 5` IMU control packet は sender 制御用であり、`sensor.bin` へは保存しない（長さが 5 bytes でなかったり command が 1 / 2 でなければ decode error）
-- `type = 2` GPS と `type = 4` IMU batch の `gps_utc_ms != 0` は、受信時に RTC 補正にも使う
+- `type = 2` GPS、`type = 4` / `type = 7` IMU batch、`type = 6` attitude の `gps_utc_ms != 0` は、受信時に RTC 補正にも使う
 
 English supplement: The on-air packet format is intentionally small. ESP-NOW already provides payload length, so v1 does not duplicate a packet-local payload length field before data enters the binary storage pipeline.
 
@@ -145,7 +147,7 @@ packet 形状:
 送信条件:
 
 - `RMC` または `ZDA` で有効時刻を得る
-- 秒が `00 / 15 / 30 / 45` のときだけ送信する
+- 1 分間に数回送る。多くても毎秒 1 回まで。何秒に送るかは送信側の都合で決まり、receiver は決まった秒を前提にしない
 
 補足:
 
@@ -182,7 +184,7 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     uint16_t magic;       // 0xA55A
     uint8_t version;      // 1
-    uint8_t type;         // 1=IMU, 2=GPS, 4=IMU batch
+    uint8_t type;         // 1=IMU, 2=GPS, 4=IMU batch, 6=attitude, 7=IMU batch (no summary)
     uint16_t header_len;  // sizeof(sensor_record_header_v1_t)
     uint16_t payload_len; // payload bytes
     uint32_t seq;         // sensor.bin record sequence
@@ -231,11 +233,15 @@ typedef uint32_t sensor_record_crc32_t;
 
 ## Record Types
 
-v1 で使用する type は次の 3 つです。
+v1 で使用する type は次の 5 つです。record type は on-air の `type` と同じ値で、payload は on-air の header 後ろをそのまま保存します。
 
 - `1 = IMU`
 - `2 = GPS`
 - `4 = IMU batch`
+- `6 = attitude`
+- `7 = IMU batch (summary なし)`
+
+record version は 1 のままです。type 6 / 7 は古い reader では未知の `type` として `payload_len` で skip されます。
 
 `3` は on-air UTC time packet 用であり、`sensor.bin` record には使いません。
 
@@ -297,6 +303,49 @@ typedef struct __attribute__((packed)) {
 - `raw[i]` は accel 3軸 + gyro 3軸 のみを持ち、温度は packet header 側の 1 回だけを使う
 
 English supplement: Storing the batch as a native batch record preserves the sender contract without inventing receiver-side interpolation rules.
+
+## IMU Batch (no summary) Payload
+
+`type = 7` の payload は、`type = 4` から `summary`（36 bytes）を除いたもので、138 bytes です。header の各項目の意味は type 4 と同じです。
+
+```c
+typedef struct __attribute__((packed)) {
+    uint32_t sequence_start;
+    uint8_t sample_count;       // 1..10
+    uint8_t sample_period_ms;
+    uint16_t flags;
+    int16_t temperature_centi_c;
+    uint64_t gps_utc_ms;
+    imu_raw_sample_v1_t raw[10];
+} sensor_imu_batch_nosummary_payload_v2_t;
+```
+
+補足:
+
+- sender が type 4 も併送しているとき（`IMU_SEND_LEGACY_BATCH`）、同じ batch が type 4 と type 7 の 2 record で `sensor.bin` に入る。受信側は重複を除かず、受け取ったまま保存する
+- 重複は offline tool で除く（`sequence_start` と `gps_utc_ms` が同じ type 4 と type 7 は同じ batch）
+
+## Attitude Payload
+
+`type = 6` の payload は 26 bytes です。値は車体座標系（X 前、Y 左、Z 上）で、`sequence` は対になる batch の `sequence_start`、値はその batch の最後の sample（`sequence + 9`）の時点のものです。
+
+```c
+typedef struct __attribute__((packed)) {
+    uint32_t sequence;
+    uint64_t gps_utc_ms;
+    int16_t roll_centi_deg;      // 0.01 deg, 右傾き正
+    int16_t pitch_centi_deg;     // 0.01 deg, 機首上げ正
+    int16_t yaw_rate_centi_dps;  // 0.01 deg/s, 左旋回正
+    int16_t long_accel_mg;       // 前向き正（重力除去済み）
+    int16_t lat_accel_mg;        // 左向き正（重力除去済み）
+    uint16_t speed_cmps;         // 補正に使った GPS 速度 [cm/s]（GPS 無効なら 0）
+    uint16_t flags;
+} sensor_attitude_payload_v2_t;
+```
+
+`flags` の bit 8-10 は `vehicle_state`（0 不明 / 1 停止 / 2 直進巡航 / 3 直進加速 / 4 直進減速 / 5 コーナリング / 6 遷移）、bit 11-12 は `up_confidence`、bit 13-14 は `forward_confidence`（0 なし / 1 coarse / 2 good）です。その他の bit は sender の `ESPNOW_PROTOCOL.md` を参照してください。
+
+English supplement: Types 4 and 7 are in the board frame; type 6 is in the vehicle frame.
 
 ## GPS Payload
 
@@ -391,7 +440,7 @@ v1 reader は次を前提にします。
 - `magic == 0xA55A`
 - `version == 1`
 - `header_len == sizeof(sensor_record_header_v1_t)`
-- `type in {1, 2, 4}`
+- `type in {1, 2, 4, 6, 7}`
 
 未知の `type` に遭遇した場合でも、
 `payload_len` を使って record を skip できる設計を維持します。
@@ -412,12 +461,15 @@ python3 scripts/export_sensor_bin_csv.py /path/to/sensor_0001.bin
 
 - `sensor_0001_imu.csv`
 - `sensor_0001_gps.csv`
-- `sensor_0001_imu_batch.csv`
+- `sensor_0001_imu_batch.csv`（type 4 と type 7）
+- `sensor_0001_attitude.csv`（type 6）
 
 補足:
 
 - CSV には record header の `seq` / `ts_ms` と、各 payload の生データを残します
 - GPS 側には `lat_deg` などの派生列も含めます
+- `_imu_batch.csv` は最後の列 `record_type`（`4` または `7`）で由来を示します。type 7 は summary を持たないので `summary_*` 列は空です。sender が両方を送っていると、同じ batch が 2 行（type 4 と type 7）入ります
+- `_attitude.csv` の列: `file_offset, record_seq, record_ts_ms, sequence, gps_utc_ms, gps_utc_iso8601`、生の値 `roll_centi_deg, pitch_centi_deg, yaw_rate_centi_dps, long_accel_mg, lat_accel_mg, speed_cmps, flags`、派生の `roll_deg, pitch_deg, yaw_rate_dps, long_accel_g, lat_accel_g, speed_mps`、`flags` から取り出した `vehicle_state, up_confidence, forward_confidence`
 
 English supplement: This is an offline convenience tool. The binary file remains the source of truth, and the CSV split is derived data for analysis.
 
@@ -436,7 +488,7 @@ python3 scripts/plot_sensor_csv.py sensor_0001_gps.csv sensor_0001_imu.csv --out
 - 単位変換は mg→g、mdps→deg/s、cdeg→℃、`lat_e7`/`lon_e7`→度、mm/s→km/h
 - GPS で軌跡から除く行: `fix_type == 0`、緯度経度が (0, 0)、範囲外(±90 / ±180)、数値に変換できない行。除いた数は標準出力に出ます。`fix_type` は 0 以外なら残します(実ログには 1 と 6 があり、上の `0/1/2` の定義とは一致しないため)
 - IMU は数値に変換できない行だけ除きます
-- `_imu_batch.csv`(実機ログの IMU はこちらに入ります)も IMU 入力として渡せます(`_imu.csv` とは同時に指定できません)。`raw_samples_json` を展開し、時刻は `record_ts_ms + offset_ms`、角速度は centi_dps→deg/s、温度はバッチ値です。サンプルが多い(約 100 万点)ので `--step N`(既定 10)で N サンプルずつ平均して間引きます。`--step 1` で間引きなしですが HTML が非常に大きくなります。間引くと短いピークは鈍ります
+- `_imu_batch.csv`(実機ログの IMU はこちらに入ります)も IMU 入力として渡せます(`_imu.csv` とは同時に指定できません)。`raw_samples_json` を展開し、時刻は `record_ts_ms + offset_ms`、角速度は centi_dps→deg/s、温度はバッチ値です。`record_type` 列があるときは、同じ `(sequence_start, gps_utc_ms)` の type 7 がある type 4 の行を重複として除きます(`record_type` 列が無い古い CSV はそのまま全行を使います)。サンプルが多い(約 100 万点)ので `--step N`(既定 10)で N サンプルずつ平均して間引きます。`--step 1` で間引きなしですが HTML が非常に大きくなります。間引くと短いピークは鈍ります
 - HTML は CDN(Leaflet / Plotly / OSM タイル)を読み込むため、開くにはネットワークが必要です
 - 注意: 地図 HTML には実際の位置情報が入ります。`.gitignore` で `*.csv` と出力 HTML を除外していますが、出力先はリポジトリの外にし、公開しないでください
 

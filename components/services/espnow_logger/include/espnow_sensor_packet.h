@@ -26,6 +26,8 @@ extern "C" {
 #define ESPNOW_SENSOR_TYPE_UTC_TIME 3
 #define ESPNOW_SENSOR_TYPE_IMU_BATCH 4
 #define ESPNOW_SENSOR_TYPE_IMU_CONTROL 5
+#define ESPNOW_SENSOR_TYPE_ATTITUDE 6
+#define ESPNOW_SENSOR_TYPE_IMU_BATCH_NOSUMMARY 7
 
 #define ESPNOW_SENSOR_IMU_CONTROL_START 1
 #define ESPNOW_SENSOR_IMU_CONTROL_STOP 2
@@ -96,6 +98,30 @@ typedef struct __attribute__((packed)) {
     espnow_sensor_imu_raw_sample_t raw[ESPNOW_SENSOR_IMU_BATCH_MAX_SAMPLES];
 } espnow_sensor_imu_batch_payload_t;
 
+/* Type 7: the same as type 4 without the summary block. */
+typedef struct __attribute__((packed)) {
+    uint32_t sequence_start;
+    uint8_t sample_count;
+    uint8_t sample_period_ms;
+    uint16_t flags;
+    int16_t temperature_centi_c;
+    uint64_t gps_utc_ms;
+    espnow_sensor_imu_raw_sample_t raw[ESPNOW_SENSOR_IMU_BATCH_MAX_SAMPLES];
+} espnow_sensor_imu_batch_nosummary_payload_t;
+
+/* Type 6: attitude in the vehicle frame; `sequence` is the paired batch's sequence_start. */
+typedef struct __attribute__((packed)) {
+    uint32_t sequence;
+    uint64_t gps_utc_ms;
+    int16_t roll_centi_deg;
+    int16_t pitch_centi_deg;
+    int16_t yaw_rate_centi_dps;
+    int16_t long_accel_mg;
+    int16_t lat_accel_mg;
+    uint16_t speed_cmps;
+    uint16_t flags;
+} espnow_sensor_attitude_payload_t;
+
 typedef struct __attribute__((packed)) {
     uint8_t utc_year_le[2];
     uint8_t utc_month;
@@ -123,6 +149,8 @@ _Static_assert(sizeof(espnow_sensor_gps_payload_t) == 36, "gps payload must be 3
 _Static_assert(sizeof(espnow_sensor_imu_raw_sample_t) == 12, "imu raw sample must be 12 bytes");
 _Static_assert(sizeof(espnow_sensor_imu_batch_summary_t) == 36, "imu batch summary must be 36 bytes");
 _Static_assert(sizeof(espnow_sensor_imu_batch_payload_t) == 174, "imu batch payload must be 174 bytes");
+_Static_assert(sizeof(espnow_sensor_imu_batch_nosummary_payload_t) == 138, "imu batch (type 7) payload must be 138 bytes");
+_Static_assert(sizeof(espnow_sensor_attitude_payload_t) == 26, "attitude payload must be 26 bytes");
 _Static_assert(sizeof(espnow_sensor_utc_time_payload_t) == 7, "utc time payload must be 7 bytes");
 _Static_assert(sizeof(espnow_sensor_record_header_t) == 20, "record header must be 20 bytes");
 
@@ -137,6 +165,10 @@ typedef enum {
     ESPNOW_SENSOR_KIND_IMU,
     ESPNOW_SENSOR_KIND_GPS,
     ESPNOW_SENSOR_KIND_IMU_BATCH,
+    /* Type 7: IMU batch without summary. Same data as IMU_BATCH minus the summary. */
+    ESPNOW_SENSOR_KIND_IMU_BATCH_NOSUMMARY,
+    /* Type 6: attitude (vehicle frame). */
+    ESPNOW_SENSOR_KIND_ATTITUDE,
     /* Valid UTC time broadcast; utc_epoch_ms is set. Not a sensor record. */
     ESPNOW_SENSOR_KIND_UTC_TIME,
     /* Valid IMU control packet; control_command is set. Not a sensor record. */
@@ -151,9 +183,11 @@ typedef struct {
         espnow_sensor_imu_payload_t imu;
         espnow_sensor_gps_payload_t gps;
         espnow_sensor_imu_batch_payload_t imu_batch;
+        espnow_sensor_imu_batch_nosummary_payload_t imu_batch_nosummary;
+        espnow_sensor_attitude_payload_t attitude;
     } body;
     uint8_t control_command;
-    /* Unix epoch ms that the packet carries (GPS / IMU batch gps_utc_ms, or the
+    /* Unix epoch ms that the packet carries (GPS / IMU batch / attitude gps_utc_ms, or the
        UTC time packet); 0 when it carries none. A receiver may set its clock. */
     uint64_t utc_epoch_ms;
     /* Set with DECODE_ERROR: a one-line reason for the error log. */
@@ -177,7 +211,7 @@ uint32_t espnow_sensor_crc32(uint32_t crc, const void *data, size_t len);
 
 /*
  * Writes one sensor.bin record (header + payload + crc32) into `out`. `kind` must be
- * IMU, GPS or IMU_BATCH and the payload is taken from `packet->body`. Returns the
+ * IMU, GPS, IMU_BATCH, IMU_BATCH_NOSUMMARY or ATTITUDE and the payload is taken from `packet->body`. Returns the
  * record length, or 0 when `kind` is not a sensor record or `out_size` is too small.
  */
 size_t espnow_sensor_record_encode(const espnow_sensor_packet_t *packet,

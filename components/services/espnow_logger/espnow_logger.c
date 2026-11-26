@@ -702,10 +702,11 @@ bool espnow_logger_get_time_source(espnow_logger_time_source_t *out)
  * One RX frame: sensor packets become sensor.bin records (and may set the clock);
  * everything else, including time and control packets, becomes an espnow.csv row.
  * Decode errors go to the shared error log as well, only while logging is wanted.
+ * Returns true when the frame was a sensor record (IMU / GPS / IMU batch / attitude).
  *
  * English contract: runs on the Wi-Fi task. It copies into streams with no wait.
  */
-static void log_rx_frame(uint64_t ts_ms, const uint8_t *src_mac, const uint8_t *payload, size_t len)
+static bool log_rx_frame(uint64_t ts_ms, const uint8_t *src_mac, const uint8_t *payload, size_t len)
 {
     espnow_sensor_packet_t packet;
 
@@ -716,7 +717,9 @@ static void log_rx_frame(uint64_t ts_ms, const uint8_t *src_mac, const uint8_t *
     }
 
     if (src_mac != NULL && (packet.kind == ESPNOW_SENSOR_KIND_UTC_TIME || packet.kind == ESPNOW_SENSOR_KIND_IMU ||
-                            packet.kind == ESPNOW_SENSOR_KIND_IMU_BATCH)) {
+                            packet.kind == ESPNOW_SENSOR_KIND_IMU_BATCH ||
+                            packet.kind == ESPNOW_SENSOR_KIND_IMU_BATCH_NOSUMMARY ||
+                            packet.kind == ESPNOW_SENSOR_KIND_ATTITUDE)) {
         note_time_source(packet.kind, src_mac, ts_ms);
     }
 
@@ -724,8 +727,10 @@ static void log_rx_frame(uint64_t ts_ms, const uint8_t *src_mac, const uint8_t *
     case ESPNOW_SENSOR_KIND_IMU:
     case ESPNOW_SENSOR_KIND_GPS:
     case ESPNOW_SENSOR_KIND_IMU_BATCH:
+    case ESPNOW_SENSOR_KIND_IMU_BATCH_NOSUMMARY:
+    case ESPNOW_SENSOR_KIND_ATTITUDE:
         write_sensor_record(&packet, ts_ms);
-        return;
+        return true;
     case ESPNOW_SENSOR_KIND_DECODE_ERROR:
         if (s_log.requested) {
             char mac[ESPNOW_LOG_MAC_STR_LEN];
@@ -737,8 +742,14 @@ static void log_rx_frame(uint64_t ts_ms, const uint8_t *src_mac, const uint8_t *
         break;
     }
     write_csv_row(ts_ms, src_mac, payload, len);
+    return false;
 }
 
+/*
+ * Records one frame and prints it to the console. Sensor records (about 30 frames per second while an
+ * IMU streams) are not printed: their hex lines exceed what a 115200 baud console carries, and the
+ * print blocks the Wi-Fi task, which stalls the whole device. They are in sensor.bin instead.
+ */
 static void log_frame(const char *direction,
                       const char *status,
                       espnow_logger_event_direction_t event_direction,
@@ -754,20 +765,24 @@ static void log_frame(const char *direction,
     char dst_str[ESPNOW_LOG_MAC_STR_LEN];
     char payload_hex[ESPNOW_LOG_HEX_MAX];
     espnow_logger_event_t event = {0};
+    bool sensor_record = false;
 
-    espnow_log_format_mac(src_mac, src_str);
-    espnow_log_format_mac(dst_mac, dst_str);
-    espnow_log_format_hex(payload, len, payload_hex, sizeof(payload_hex));
     record_event(event_direction, event_status, channel, src_mac, dst_mac, rssi, payload, len, &event);
 
     if (payload != NULL && len > 0) {
         if (event_direction == ESPNOW_LOGGER_EVENT_DIR_RX && event_status == ESPNOW_LOGGER_EVENT_STATUS_RECV) {
-            log_rx_frame(event.timestamp_ms, src_mac, payload, len);
+            sensor_record = log_rx_frame(event.timestamp_ms, src_mac, payload, len);
         } else {
             write_csv_row(event.timestamp_ms, src_mac, payload, len);
         }
     }
+    if (sensor_record) {
+        return;
+    }
 
+    espnow_log_format_mac(src_mac, src_str);
+    espnow_log_format_mac(dst_mac, dst_str);
+    espnow_log_format_hex(payload, len, payload_hex, sizeof(payload_hex));
     ESP_LOGI(TAG,
              "%s status=%s ts_ms=%" PRIu64 " ch=%u src=%s dst=%s rssi=%d len=%u payload=%s",
              direction,

@@ -44,6 +44,7 @@ class ImuData:
     temp_c: list
     total_rows: int = 0
     skipped_rows: int = 0
+    duplicate_rows: int = 0   # imu_batch only: type 4 rows dropped because type 7 carries the same batch
 
 
 @dataclass
@@ -101,12 +102,23 @@ def load_imu_batch(path: Path, step: int = 10) -> ImuData:
     Units: mg -> g, centi_dps -> deg/s, cdeg -> degC. Consecutive `step`
     samples are averaged into one point (step=1: no decimation) to keep the
     HTML small. total_rows/skipped_rows count batch rows.
+
+    A sender may send both type 4 and type 7 for the same batch. When the CSV has
+    a record_type column, type 4 rows whose (sequence_start, gps_utc_ms) also
+    appear as type 7 are dropped (counted in duplicate_rows, not in total_rows).
+    A CSV without record_type (older export) is all type 4.
     """
     if step < 1:
         raise ValueError("step must be >= 1")
     t, ax, ay, az, gx, gy, gz, tc = ([] for _ in range(8))
     d = ImuData([], [], [], [], [], [], [], [])
-    for row in _read_rows(path, BATCH_REQUIRED):
+    rows = list(_read_rows(path, BATCH_REQUIRED))
+    type7_keys = {(r.get("sequence_start"), r.get("gps_utc_ms")) for r in rows if r.get("record_type") == "7"}
+    for row in rows:
+        if (type7_keys and row.get("record_type") == "4"
+                and (row.get("sequence_start"), row.get("gps_utc_ms")) in type7_keys):
+            d.duplicate_rows += 1
+            continue
         d.total_rows += 1
         try:
             rec_t = int(row["record_ts_ms"])
@@ -377,7 +389,8 @@ def run(gps_path: Path | None, imu_path: Path | None, out_dir: Path,
             print(f"{gps_path}: no usable GPS points; map not written", file=sys.stderr)
     if imu_path:
         stem = _stem(imu_path, "_imu_batch" if imu_batch_path else "_imu")
-        print(f"{imu_path}: rows={imu.total_rows} samples={len(imu.t_ms)} dropped={imu.skipped_rows}")
+        print(f"{imu_path}: rows={imu.total_rows} samples={len(imu.t_ms)} dropped={imu.skipped_rows}"
+              + (f" duplicate_type4={imu.duplicate_rows}" if imu.duplicate_rows else ""))
         if imu.t_ms:
             p = out_dir / f"{stem}_imu_dashboard.html"
             p.write_text(build_dashboard_html(imu, gps, f"{stem} IMU dashboard", t0), encoding="utf-8")
