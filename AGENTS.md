@@ -20,6 +20,9 @@ This file is for AI assistants; it is kept terse on purpose. Human docs: README.
 - If an existing `build/` was configured by another IDF/Python and idf.py refuses it, build into a separate dir (`-B <dir> -D SDKCONFIG=<dir>/sdkconfig`). If `fullclean` refuses to delete `build/`, ask the user to delete it; never delete it yourself.
 - `PermissionError: [Errno 1]` from psutil in idf_component_manager means the sandbox blocked process listing, not a source error: rerun with permissions.
 
+## Logging
+- Never print every ESP-NOW frame/payload to the console: the IMU stream (~30 frames/s) exceeds 115200 baud and the print blocks the Wi-Fi task (UI freezes). If needed for debugging, rate-limit it (every N frames or a 1 s summary) and remove it or drop it to `ESP_LOGD` afterwards. See docs/espnow_logger.md (Debug Payload Logging).
+
 ## Verify
 - Host tests: `bash test/host/run.sh` (component sources against stubs in `test/host/stub/`).
 - UI: `tools/cyd_sim` (SDL). `cyd_sim --export DIR --scale N` writes every scene as PNG; compare exports byte-for-byte to prove rendering is unchanged. See docs/cyd_sim.md.

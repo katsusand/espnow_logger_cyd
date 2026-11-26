@@ -173,9 +173,21 @@ namespace は `ftr_espnow`（`ftr_` は、アプリを入れ替えても残る�
 
 ## Logging Format
 
-シリアルログは 1 frame ごとに `status`、`ts_ms`、`ch`、`src`、`dst`、`rssi`、`len`、`payload`（hex）を出します。`ts_ms` は起動からの経過ミリ秒で、wall clock ではありません。TX 完了の callback は RSSI を持たないので、信号強度は受信側のログを見てください。
+センサー record になる frame（IMU / GPS / IMU batch / attitude）はシリアルに出しません。IMU 送信中は毎秒約 30 frame 届き、hex の行が 115200 baud のコンソールで送れる量を超えます。出力待ちで Wi-Fi task が止まり、画面操作まで重くなるためです。中身は `sensor.bin` に残ります。それ以外の frame（button、時刻、IMU control、decode error、TX）のシリアルログは 1 frame ごとに `status`、`ts_ms`、`ch`、`src`、`dst`、`rssi`、`len`、`payload`（hex）を出します。`ts_ms` は起動からの経過ミリ秒で、wall clock ではありません。TX 完了の callback は RSSI を持たないので、信号強度は受信側のログを見てください。
 
 `espnow.csv` の `utc_iso8601` は、system clock が合っていれば、その時刻を基にした UTC です。後で GPS UTC か UTC time packet が来ると、その値で合わせ直します。
+
+### Debug Payload Logging
+
+開発中に payload をシリアルへ出したくなったときは、先にデータ量を見積もります。
+
+- 115200 baud のコンソールで送れるのは毎秒約 11.5 KB。hex は 1 byte が 3 文字になる。例: 178 bytes の type 4 は 1 行約 650 文字で、10 Hz だけで毎秒約 6.5 KB
+- 合計が毎秒数 KB を超えるなら、frame ごとには出さない。RX callback は Wi-Fi task で動くので、出力待ちでそのまま受信と画面が止まる
+- どうしても中身を見たいときは間引く。例: kind ごとに N frame に 1 回だけ、または 1 秒ごとに件数と最後の 1 frame だけを出す。間引き方と間隔は、その行の近くにコメントで書く
+- 試し終えたら、その出力は消すか `ESP_LOGD` に下げる (既定の `CONFIG_LOG_MAXIMUM_LEVEL` は INFO なので、`ESP_LOGD` はビルドに入らない)
+- 全部の中身が必要なら、シリアルではなく `sensor.bin` / `espnow.csv` を見る
+
+English supplement: console output on the Wi-Fi task is a back-pressure path. Budget the bytes per second before adding a per-frame log, and rate-limit anything that scales with the IMU stream.
 
 ## Concurrency
 
