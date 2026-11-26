@@ -7,6 +7,8 @@ The current v1 file format stores a stream of records:
 This tool reads the binary stream, validates CRC32, and writes:
   - <stem>_imu.csv
   - <stem>_gps.csv
+  - <stem>_imu_batch.csv   (type 4 and type 7 rows; see the record_type column)
+  - <stem>_attitude.csv    (type 6)
 
 It keeps the raw integer fields and also emits a few derived human-readable
 columns for convenience.
@@ -32,6 +34,8 @@ SENSOR_VERSION = 1
 SENSOR_TYPE_IMU = 1
 SENSOR_TYPE_GPS = 2
 SENSOR_TYPE_IMU_BATCH = 4
+SENSOR_TYPE_ATTITUDE = 6
+SENSOR_TYPE_IMU_BATCH_NOSUMMARY = 7
 
 HEADER_PREFIX = struct.Struct("<HBBHHIQ")
 CRC32_SIZE = 4
@@ -40,8 +44,12 @@ MAX_HEADER_LEN = 1024
 IMU_PAYLOAD = struct.Struct("<IhhhhhhhH")
 GPS_PAYLOAD = struct.Struct("<IiiiIHHBBHQ")
 IMU_BATCH_HEADER = struct.Struct("<IBBHhQ")
+ATTITUDE_PAYLOAD = struct.Struct("<IQhhhhhHH")
 IMU_BATCH_SUMMARY = struct.Struct("<hhhhhhhhhhhhhhhhhh")
 IMU_BATCH_RAW_SAMPLE = struct.Struct("<hhhhhh")
+IMU_BATCH_SUMMARY_FIELDS = 18
+IMU_BATCH_PAYLOAD_LEN = IMU_BATCH_HEADER.size + IMU_BATCH_SUMMARY.size + IMU_BATCH_RAW_SAMPLE.size * 10
+IMU_BATCH_NOSUMMARY_PAYLOAD_LEN = IMU_BATCH_HEADER.size + IMU_BATCH_RAW_SAMPLE.size * 10
 
 IMU_CSV_HEADER = [
     "file_offset",
@@ -112,6 +120,33 @@ IMU_BATCH_CSV_HEADER = [
     "summary_gyro_max_y_centi_dps",
     "summary_gyro_max_z_centi_dps",
     "raw_samples_json",
+    # 4 or 7. Type 7 has no summary (summary_* columns are empty). A sender may send both for one batch.
+    "record_type",
+]
+
+ATTITUDE_CSV_HEADER = [
+    "file_offset",
+    "record_seq",
+    "record_ts_ms",
+    "sequence",
+    "gps_utc_ms",
+    "gps_utc_iso8601",
+    "roll_centi_deg",
+    "pitch_centi_deg",
+    "yaw_rate_centi_dps",
+    "long_accel_mg",
+    "lat_accel_mg",
+    "speed_cmps",
+    "flags",
+    "roll_deg",
+    "pitch_deg",
+    "yaw_rate_dps",
+    "long_accel_g",
+    "lat_accel_g",
+    "speed_mps",
+    "vehicle_state",
+    "up_confidence",
+    "forward_confidence",
 ]
 
 
@@ -120,6 +155,8 @@ class ParseStats:
     imu_records: int = 0
     gps_records: int = 0
     imu_batch_records: int = 0
+    imu_batch_nosummary_records: int = 0
+    attitude_records: int = 0
     skipped_records: int = 0
 
 
@@ -214,13 +251,60 @@ def _write_gps_row(writer: csv.writer, file_offset: int, record_seq: int, record
     )
 
 
-def _write_imu_batch_row(writer: csv.writer, file_offset: int, record_seq: int, record_ts_ms: int, payload: bytes) -> None:
+def _write_attitude_row(writer: csv.writer, file_offset: int, record_seq: int, record_ts_ms: int, payload: bytes) -> None:
+    (
+        sequence,
+        gps_utc_ms,
+        roll_centi_deg,
+        pitch_centi_deg,
+        yaw_rate_centi_dps,
+        long_accel_mg,
+        lat_accel_mg,
+        speed_cmps,
+        flags,
+    ) = ATTITUDE_PAYLOAD.unpack(payload)
+    writer.writerow(
+        [
+            file_offset,
+            record_seq,
+            record_ts_ms,
+            sequence,
+            gps_utc_ms,
+            _iso8601_utc_from_ms(gps_utc_ms),
+            roll_centi_deg,
+            pitch_centi_deg,
+            yaw_rate_centi_dps,
+            long_accel_mg,
+            lat_accel_mg,
+            speed_cmps,
+            flags,
+            f"{roll_centi_deg / 100.0:.2f}",
+            f"{pitch_centi_deg / 100.0:.2f}",
+            f"{yaw_rate_centi_dps / 100.0:.2f}",
+            f"{long_accel_mg / 1000.0:.3f}",
+            f"{lat_accel_mg / 1000.0:.3f}",
+            f"{speed_cmps / 100.0:.2f}",
+            (flags >> 8) & 0x7,
+            (flags >> 11) & 0x3,
+            (flags >> 13) & 0x3,
+        ]
+    )
+
+
+def _write_imu_batch_row(
+    writer: csv.writer, file_offset: int, record_seq: int, record_ts_ms: int, payload: bytes, record_type: int
+) -> None:
     header_size = IMU_BATCH_HEADER.size
-    summary_size = IMU_BATCH_SUMMARY.size
     sequence_start, sample_count, sample_period_ms, flags, temp_cdeg, gps_utc_ms = IMU_BATCH_HEADER.unpack(
         payload[:header_size]
     )
-    summary_values = IMU_BATCH_SUMMARY.unpack(payload[header_size : header_size + summary_size])
+    if record_type == SENSOR_TYPE_IMU_BATCH:
+        summary_size = IMU_BATCH_SUMMARY.size
+        summary_values = IMU_BATCH_SUMMARY.unpack(payload[header_size : header_size + summary_size])
+    else:
+        # type 7 carries no summary block: raw samples follow the header directly.
+        summary_size = 0
+        summary_values = [""] * IMU_BATCH_SUMMARY_FIELDS
     raw_blob = payload[header_size + summary_size :]
     if sample_count == 0 or sample_count > 10:
         raise SensorBinError(f"invalid IMU batch sample_count: {sample_count}")
@@ -256,6 +340,7 @@ def _write_imu_batch_row(writer: csv.writer, file_offset: int, record_seq: int, 
             _iso8601_utc_from_ms(gps_utc_ms),
             *summary_values,
             json.dumps(raw_samples, separators=(",", ":")),
+            record_type,
         ]
     )
 
@@ -267,6 +352,7 @@ def convert_sensor_file(input_path: Path, output_dir: Path) -> ParseStats:
     imu_path = output_dir / f"{input_path.stem}_imu.csv"
     gps_path = output_dir / f"{input_path.stem}_gps.csv"
     imu_batch_path = output_dir / f"{input_path.stem}_imu_batch.csv"
+    attitude_path = output_dir / f"{input_path.stem}_attitude.csv"
 
     with ExitStack() as stack:
         stream = stack.enter_context(input_path.open("rb"))
@@ -275,10 +361,13 @@ def convert_sensor_file(input_path: Path, output_dir: Path) -> ParseStats:
         imu_batch_fh = stack.enter_context(imu_batch_path.open("w", encoding="utf-8", newline=""))
         imu_writer = csv.writer(imu_fh)
         gps_writer = csv.writer(gps_fh)
+        attitude_fh = stack.enter_context(attitude_path.open("w", encoding="utf-8", newline=""))
         imu_batch_writer = csv.writer(imu_batch_fh)
+        attitude_writer = csv.writer(attitude_fh)
         imu_writer.writerow(IMU_CSV_HEADER)
         gps_writer.writerow(GPS_CSV_HEADER)
         imu_batch_writer.writerow(IMU_BATCH_CSV_HEADER)
+        attitude_writer.writerow(ATTITUDE_CSV_HEADER)
 
         while True:
             record_offset = stream.tell()
@@ -328,14 +417,28 @@ def convert_sensor_file(input_path: Path, output_dir: Path) -> ParseStats:
                     )
                 _write_gps_row(gps_writer, record_offset, record_seq, record_ts_ms, payload)
                 stats.gps_records += 1
-            elif record_type == SENSOR_TYPE_IMU_BATCH:
-                if payload_len != IMU_BATCH_HEADER.size + IMU_BATCH_SUMMARY.size + IMU_BATCH_RAW_SAMPLE.size * 10:
+            elif record_type in (SENSOR_TYPE_IMU_BATCH, SENSOR_TYPE_IMU_BATCH_NOSUMMARY):
+                expected_len = (
+                    IMU_BATCH_PAYLOAD_LEN if record_type == SENSOR_TYPE_IMU_BATCH else IMU_BATCH_NOSUMMARY_PAYLOAD_LEN
+                )
+                if payload_len != expected_len:
                     raise SensorBinError(
-                        f"{input_path}: IMU batch payload_len mismatch at offset {record_offset}: "
-                        f"{payload_len} != {IMU_BATCH_HEADER.size + IMU_BATCH_SUMMARY.size + IMU_BATCH_RAW_SAMPLE.size * 10}"
+                        f"{input_path}: IMU batch (type {record_type}) payload_len mismatch at offset "
+                        f"{record_offset}: {payload_len} != {expected_len}"
                     )
-                _write_imu_batch_row(imu_batch_writer, record_offset, record_seq, record_ts_ms, payload)
-                stats.imu_batch_records += 1
+                _write_imu_batch_row(imu_batch_writer, record_offset, record_seq, record_ts_ms, payload, record_type)
+                if record_type == SENSOR_TYPE_IMU_BATCH:
+                    stats.imu_batch_records += 1
+                else:
+                    stats.imu_batch_nosummary_records += 1
+            elif record_type == SENSOR_TYPE_ATTITUDE:
+                if payload_len != ATTITUDE_PAYLOAD.size:
+                    raise SensorBinError(
+                        f"{input_path}: attitude payload_len mismatch at offset {record_offset}: "
+                        f"{payload_len} != {ATTITUDE_PAYLOAD.size}"
+                    )
+                _write_attitude_row(attitude_writer, record_offset, record_seq, record_ts_ms, payload)
+                stats.attitude_records += 1
             else:
                 stats.skipped_records += 1
 
@@ -390,8 +493,10 @@ def main(argv: list[str]) -> int:
 
         print(
             f"{input_path}: imu={stats.imu_records} gps={stats.gps_records} imu_batch={stats.imu_batch_records} "
+            f"imu_batch_nosummary={stats.imu_batch_nosummary_records} attitude={stats.attitude_records} "
             f"skipped={stats.skipped_records} -> {output_dir / f'{input_path.stem}_imu.csv'} , "
-            f"{output_dir / f'{input_path.stem}_gps.csv'} , {output_dir / f'{input_path.stem}_imu_batch.csv'}"
+            f"{output_dir / f'{input_path.stem}_gps.csv'} , {output_dir / f'{input_path.stem}_imu_batch.csv'} , "
+            f"{output_dir / f'{input_path.stem}_attitude.csv'}"
         )
 
     return exit_code

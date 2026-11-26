@@ -80,6 +80,26 @@ class PlotTest(unittest.TestCase):
         files = P.run(None, None, self.tmp / "ob", imu_batch_path=p, step=1)
         self.assertEqual([f.name for f in files], ["b_imu_dashboard.html"])
 
+    def test_imu_batch_dedupes_type4_against_type7(self):
+        import json
+        cols = ["record_ts_ms", "sequence_start", "temp_cdeg", "gps_utc_ms", "raw_samples_json", "record_type"]
+        smp = lambda i: {"offset_ms": i * 10, "ax_mg": 100, "ay_mg": 0, "az_mg": 1000,
+                         "gx_centi_dps": 0, "gy_centi_dps": 0, "gz_centi_dps": 0}
+        raw = json.dumps([smp(i) for i in range(2)])
+        p = self.tmp / "d_imu_batch.csv"
+        write_csv(p, cols, [
+            [1000, 10, 3700, 5000, raw, 4],   # same batch as the type 7 row: dropped
+            [1000, 10, 3700, 5000, raw, 7],
+            [1100, 20, 3700, 5100, raw, 4],   # no type 7 twin: kept
+        ])
+        d = P.load_imu_batch(p, step=1)
+        self.assertEqual((d.total_rows, d.duplicate_rows, len(d.t_ms)), (2, 1, 4))
+        # an older CSV without record_type is never deduplicated
+        q = self.tmp / "e_imu_batch.csv"
+        write_csv(q, cols[:-1], [[1000, 10, 3700, 5000, raw], [1000, 10, 3700, 5000, raw]])
+        d = P.load_imu_batch(q, step=1)
+        self.assertEqual((d.total_rows, d.duplicate_rows), (2, 0))
+
     def test_detect_turns(self):
         # 100 ms samples: stationary 5 s, then 20 km/h straight, 90 deg right turn (gz=-30 dps for 3 s), straight
         gt, gv, it = [], [], []

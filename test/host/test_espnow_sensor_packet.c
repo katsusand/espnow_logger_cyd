@@ -50,6 +50,13 @@ static void test_layout(void)
     check(offsetof(espnow_sensor_gps_payload_t, gps_utc_ms) == 28, "GPS gps_utc_ms is at payload offset 28");
     check(offsetof(espnow_sensor_imu_batch_payload_t, gps_utc_ms) == 10, "batch gps_utc_ms is at payload offset 10");
     check(offsetof(espnow_sensor_imu_batch_payload_t, raw) == 54, "batch raw samples start at payload offset 54");
+    check(sizeof(espnow_sensor_packet_header_t) + sizeof(espnow_sensor_imu_batch_nosummary_payload_t) == 142, "type 7 packet is 142 bytes");
+    check(sizeof(espnow_sensor_packet_header_t) + sizeof(espnow_sensor_attitude_payload_t) == 30, "type 6 packet is 30 bytes");
+    check(offsetof(espnow_sensor_imu_batch_nosummary_payload_t, gps_utc_ms) == 10, "type 7 gps_utc_ms is at payload offset 10");
+    check(offsetof(espnow_sensor_imu_batch_nosummary_payload_t, raw) == 18, "type 7 raw samples start at payload offset 18");
+    check(offsetof(espnow_sensor_attitude_payload_t, gps_utc_ms) == 4, "attitude gps_utc_ms is at payload offset 4");
+    check(offsetof(espnow_sensor_attitude_payload_t, roll_centi_deg) == 12, "attitude roll is at payload offset 12");
+    check(offsetof(espnow_sensor_attitude_payload_t, flags) == 24, "attitude flags are at payload offset 24");
 }
 
 static void test_not_sensor(void)
@@ -130,6 +137,68 @@ static void test_batch(void)
     len = make_packet(wire, ESPNOW_SENSOR_TYPE_IMU_BATCH, &batch, sizeof(batch));
     espnow_sensor_packet_parse(wire, len - 12, &packet);
     check(packet.kind == ESPNOW_SENSOR_KIND_DECODE_ERROR, "batch missing one raw sample is an error");
+}
+
+static void test_batch_nosummary_and_attitude(void)
+{
+    uint8_t wire[200];
+    espnow_sensor_packet_t packet;
+    espnow_sensor_imu_batch_nosummary_payload_t batch;
+    espnow_sensor_attitude_payload_t att;
+    size_t len;
+
+    memset(&batch, 0, sizeof(batch));
+    batch.sequence_start = 200;
+    batch.sample_count = 10;
+    batch.sample_period_ms = 10;
+    batch.gps_utc_ms = 1709208000000ULL;
+    batch.raw[9].gyro_centi_dps[2] = -77;
+    len = make_packet(wire, ESPNOW_SENSOR_TYPE_IMU_BATCH_NOSUMMARY, &batch, sizeof(batch));
+    check(len == 142, "type 7 wire length is 142");
+    espnow_sensor_packet_parse(wire, len, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_IMU_BATCH_NOSUMMARY && packet.body.imu_batch_nosummary.sequence_start == 200 &&
+              packet.body.imu_batch_nosummary.raw[9].gyro_centi_dps[2] == -77,
+          "type 7 is parsed, last raw sample intact");
+    check(packet.utc_epoch_ms == 1709208000000ULL, "type 7 gps_utc_ms is the time it carries");
+    espnow_sensor_packet_parse(wire, len - 1, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_DECODE_ERROR, "type 7 one byte short is an error");
+    espnow_sensor_packet_parse(wire, len + 1, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_DECODE_ERROR, "type 7 one byte long is an error");
+    batch.sample_count = 0;
+    len = make_packet(wire, ESPNOW_SENSOR_TYPE_IMU_BATCH_NOSUMMARY, &batch, sizeof(batch));
+    espnow_sensor_packet_parse(wire, len, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_DECODE_ERROR && strstr(packet.error, "sample_count") != NULL, "type 7 with 0 samples is an error");
+    batch.sample_count = 11;
+    len = make_packet(wire, ESPNOW_SENSOR_TYPE_IMU_BATCH_NOSUMMARY, &batch, sizeof(batch));
+    espnow_sensor_packet_parse(wire, len, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_DECODE_ERROR, "type 7 with 11 samples is an error");
+
+    memset(&att, 0, sizeof(att));
+    att.sequence = 200;
+    att.gps_utc_ms = 1709208000123ULL;
+    att.roll_centi_deg = -1234;
+    att.pitch_centi_deg = 567;
+    att.yaw_rate_centi_dps = -89;
+    att.long_accel_mg = 321;
+    att.lat_accel_mg = -654;
+    att.speed_cmps = 1500;
+    att.flags = 0x8000U | (2U << 13);
+    len = make_packet(wire, ESPNOW_SENSOR_TYPE_ATTITUDE, &att, sizeof(att));
+    check(len == 30, "type 6 wire length is 30");
+    espnow_sensor_packet_parse(wire, len, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_ATTITUDE && packet.body.attitude.roll_centi_deg == -1234 &&
+              packet.body.attitude.lat_accel_mg == -654 && packet.body.attitude.speed_cmps == 1500 &&
+              packet.body.attitude.flags == (0x8000U | (2U << 13)),
+          "type 6 is parsed");
+    check(packet.utc_epoch_ms == 1709208000123ULL, "type 6 gps_utc_ms is the time it carries");
+    espnow_sensor_packet_parse(wire, len - 1, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_DECODE_ERROR && strstr(packet.error, "attitude") != NULL, "type 6 one byte short is an error");
+    espnow_sensor_packet_parse(wire, len + 1, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_DECODE_ERROR, "type 6 one byte long is an error");
+    att.gps_utc_ms = 0;
+    len = make_packet(wire, ESPNOW_SENSOR_TYPE_ATTITUDE, &att, sizeof(att));
+    espnow_sensor_packet_parse(wire, len, &packet);
+    check(packet.kind == ESPNOW_SENSOR_KIND_ATTITUDE && packet.utc_epoch_ms == 0, "type 6 with gps_utc_ms 0 carries no time");
 }
 
 static void test_utc_time(void)
@@ -223,6 +292,33 @@ static void test_record(void)
     memcpy(&header, record, sizeof(header));
     check(header.type == 4 && header.payload_len == 174, "batch record type 4, payload 174");
 
+    espnow_sensor_imu_batch_nosummary_payload_t batch7;
+    memset(&batch7, 0, sizeof(batch7));
+    batch7.sample_count = 10;
+    len = make_packet(big, ESPNOW_SENSOR_TYPE_IMU_BATCH_NOSUMMARY, &batch7, sizeof(batch7));
+    espnow_sensor_packet_parse(big, len, &packet);
+    total = espnow_sensor_record_encode(&packet, 7, 99, record, sizeof(record));
+    check(total == 20 + 138 + 4, "type 7 record is header 20 + payload 138 + crc 4");
+    memcpy(&header, record, sizeof(header));
+    check(header.type == 7 && header.payload_len == 138 && header.seq == 7 && header.ts_ms == 99, "type 7 record header");
+    memcpy(&crc, record + total - 4, 4);
+    check(crc == espnow_sensor_crc32(0, record, total - 4), "type 7 record crc32");
+    check(memcmp(record + 20, &batch7, sizeof(batch7)) == 0, "type 7 payload is stored as received");
+
+    espnow_sensor_attitude_payload_t att;
+    memset(&att, 0, sizeof(att));
+    att.sequence = 5;
+    att.roll_centi_deg = -42;
+    len = make_packet(big, ESPNOW_SENSOR_TYPE_ATTITUDE, &att, sizeof(att));
+    espnow_sensor_packet_parse(big, len, &packet);
+    total = espnow_sensor_record_encode(&packet, 8, 100, record, sizeof(record));
+    check(total == 20 + 26 + 4, "type 6 record is header 20 + payload 26 + crc 4");
+    memcpy(&header, record, sizeof(header));
+    check(header.type == 6 && header.payload_len == 26, "type 6 record header");
+    memcpy(&crc, record + total - 4, 4);
+    check(crc == espnow_sensor_crc32(0, record, total - 4), "type 6 record crc32");
+    check(memcmp(record + 20, &att, sizeof(att)) == 0, "type 6 payload is stored as received");
+
     packet.kind = ESPNOW_SENSOR_KIND_UTC_TIME;
     check(espnow_sensor_record_encode(&packet, 1, 1, record, sizeof(record)) == 0, "a UTC time packet is not a record");
     packet.kind = ESPNOW_SENSOR_KIND_NOT_SENSOR;
@@ -239,6 +335,8 @@ int main(void)
     test_imu_and_gps();
     printf("IMU batch\n");
     test_batch();
+    printf("IMU batch without summary and attitude\n");
+    test_batch_nosummary_and_attitude();
     printf("UTC time\n");
     test_utc_time();
     printf("control and errors\n");

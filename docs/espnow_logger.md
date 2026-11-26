@@ -47,7 +47,7 @@ English supplement: coexistence with STA Wi-Fi is not implemented yet; the guard
 - 起動時送信と periodic 送信（Kconfig で有効にしたとき）
 - RX / TX frame のシリアルログと、履歴の保持
 - IMU stream 開始 / 停止要求の送信
-- sender が運んだ UTC で system clock を合わせる（GPS / IMU batch の `gps_utc_ms`、UTC time packet）
+- sender が運んだ UTC で system clock を合わせる（GPS / IMU batch / attitude の `gps_utc_ms`、UTC time packet）
 - SD ログの開始 / 停止と、カードの状態に合わせた stream の開閉
 
 担当しないもの: 通常の AP 接続、DHCP/IP、NTP、Wi-Fi setup UI、画面描画、カードの mount / format / unmount。
@@ -75,7 +75,7 @@ IMU stream 要求は、peer があればその peer へ unicast、無ければ b
 
 | API | 内容 |
 | --- | --- |
-| `espnow_logger_get_time_source(out)` | 直近 (`ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS` = 30 秒、sender は 15 秒ごとに送る) に UTC time packet (`type=3`) を送ってきた機器の MAC と、その機器が IMU を送信中か (`imu_streaming`: 同じ MAC の IMU / IMU batch を `ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS` = 2 秒以内に受けた)。該当する機器が無ければ `false` |
+| `espnow_logger_get_time_source(out)` | 直近 (`ESPNOW_LOGGER_TIME_SOURCE_WINDOW_MS` = 30 秒、sender は 15 秒ごとに送る) に UTC time packet (`type=3`) を送ってきた機器の MAC と、その機器が IMU を送信中か (`imu_streaming`: 同じ MAC の IMU / IMU batch (type 4 / 7) / attitude を `ESPNOW_LOGGER_IMU_STREAM_WINDOW_MS` = 2 秒以内に受けた)。該当する機器が無ければ `false` |
 
 English supplement: the time source is the sender of the newest UTC time packet; a different sender replaces it and clears its streaming mark. Updated on the Wi-Fi task under the service lock; readable from any task.
 
@@ -132,9 +132,9 @@ Wi-Fi task (RX callback)
 
 記録の対象:
 
-- 形式が正しいセンサー packet v2（`type=1` IMU、`type=2` GPS、`type=4` IMU batch）は `sensor.bin` へ
+- 形式が正しいセンサー packet v2（`type=1` IMU、`type=2` GPS、`type=4` / `type=7` IMU batch、`type=6` attitude）は `sensor.bin` へ
 - それ以外のすべての frame（TX も含む。button、UTC time、IMU control、decode 不能なもの）は `espnow.csv` へ
-- `gps_utc_ms != 0` の GPS / IMU batch と、UTC time packet は、system clock を合わせるのにも使う
+- `gps_utc_ms != 0` の GPS / IMU batch / attitude と、UTC time packet は、system clock を合わせるのにも使う
 
 English supplement: with logging on, one RX frame ends in exactly one place: a sensor record, or a CSV row. A frame that fails to decode is a CSV row plus an error log line.
 

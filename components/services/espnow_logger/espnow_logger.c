@@ -716,7 +716,9 @@ static void log_rx_frame(uint64_t ts_ms, const uint8_t *src_mac, const uint8_t *
     }
 
     if (src_mac != NULL && (packet.kind == ESPNOW_SENSOR_KIND_UTC_TIME || packet.kind == ESPNOW_SENSOR_KIND_IMU ||
-                            packet.kind == ESPNOW_SENSOR_KIND_IMU_BATCH)) {
+                            packet.kind == ESPNOW_SENSOR_KIND_IMU_BATCH ||
+                            packet.kind == ESPNOW_SENSOR_KIND_IMU_BATCH_NOSUMMARY ||
+                            packet.kind == ESPNOW_SENSOR_KIND_ATTITUDE)) {
         note_time_source(packet.kind, src_mac, ts_ms);
     }
 
@@ -724,6 +726,8 @@ static void log_rx_frame(uint64_t ts_ms, const uint8_t *src_mac, const uint8_t *
     case ESPNOW_SENSOR_KIND_IMU:
     case ESPNOW_SENSOR_KIND_GPS:
     case ESPNOW_SENSOR_KIND_IMU_BATCH:
+    case ESPNOW_SENSOR_KIND_IMU_BATCH_NOSUMMARY:
+    case ESPNOW_SENSOR_KIND_ATTITUDE:
         write_sensor_record(&packet, ts_ms);
         return;
     case ESPNOW_SENSOR_KIND_DECODE_ERROR:
